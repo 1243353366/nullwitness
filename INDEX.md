@@ -4,7 +4,7 @@ One entry point for everything in this repository. Generated from the tree by
 `tools/build_index.py`, and checked by a test, so a stale link fails the suite instead
 of rotting quietly.
 
-**6 documents · 2 Python modules · 0 test cases · 0 other source files · 1,633 lines.**
+**6 documents · 2 Python modules · 0 test cases · 0 other source files · 1,510 lines.**
 
 This branch is documentation only. The executable lab is on the [`experimental` branch](https://github.com/1243353366/nullwitness/tree/experimental), indexed by the `INDEX.md` there.
 
@@ -62,10 +62,6 @@ This branch is documentation only. The executable lab is on the [`experimental` 
 
 - [`examples/scenarios.json`](examples/scenarios.json): Three documented scenarios the bridge reads and validates against the contract.
 - [`examples/simulation-walkthrough.md`](examples/simulation-walkthrough.md): This is a non-executable educational example. It contains no live exploit steps, no
-
-**lab/ingest/**
-
-- [`lab/ingest/collector_selftest`](lab/ingest/collector_selftest): file
 
 **tools/**
 

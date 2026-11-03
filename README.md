@@ -79,6 +79,7 @@ states boundaries, and the lab is where those boundaries are enforced in code.
 | Integrity | [`lab/integrity/`](https://github.com/1243353366/nullwitness/tree/experimental/lab/integrity) | Forensic-integrity monitor. Detects manipulation, destruction, suppression, and fabrication of evidence by comparing four independent channels instead of matching tool signatures. |
 | Bridge | [`bridge/`](https://github.com/1243353366/nullwitness/tree/experimental/bridge) | Dependency-free Java. Reads [`examples/scenarios.json`](examples/scenarios.json), fails if a scenario claims an out-of-scope capability as authorized, emits events the lab consumes, and writes the lab's latest run back out as Markdown. |
 | Scope | [`lab/ETHICS-AND-LIMITS.md`](https://github.com/1243353366/nullwitness/blob/experimental/lab/ETHICS-AND-LIMITS.md) | What the lab refuses to build, and why: cross-network identity attribution, active probing, bait documents, reflexive manipulation of a person. |
+| Counter-anti-forensics | [`lab/integrity/counterforensics.py`](https://github.com/1243353366/nullwitness/tree/experimental/lab/integrity/counterforensics.py) | The same deception turned around: an adversary who read this repository, and the detectors that catch each technique by naming the quantity it cannot conserve. Decoy-aware precision, sub-tolerance clock walking, laundered rotation, stolen keys, planted histories. |
 | Limits | [`lab/INTEGRITY.md`](https://github.com/1243353366/nullwitness/blob/experimental/lab/INTEGRITY.md) | Threat model for the integrity monitor, including the attacker who defeats it, and the false-positive policy that keeps it switched on. |
 
 ```bash
@@ -86,13 +87,18 @@ git checkout experimental
 
 python3 -m lab.orchestrator.run_pipeline --write-report   # pipeline, synthetic data
 python3 -m lab.integrity.cli demo                         # evidence-integrity demo
-python3 -m unittest discover -s lab/tests -t .            # 68 tests
+python3 -m unittest discover -s lab/tests -t .            # 110 tests
+python3 -m lab.integrity.af_demo                          # counter-anti-forensics demo
 make -C lab/ingest check                                  # C++ ingestion self-test
 make -C bridge check                                      # Java bridge self-test
 ```
 
 The lab's numbers come from synthetic data with a known answer. They check that the
 plumbing works, not that the model predicts anything, and
+[`lab/COUNTER-ANTI-FORENSICS.md`](https://github.com/1243353366/nullwitness/blob/experimental/lab/COUNTER-ANTI-FORENSICS.md) covers the symmetric case: an adversary who read
+this repository and uses its own deception against it, which techniques that buys them,
+and which quantity each technique cannot keep consistent.
+
 [`lab/DESIGN-NOTES.md`](https://github.com/1243353366/nullwitness/blob/experimental/lab/DESIGN-NOTES.md) does the base-rate arithmetic that
 explains why.
 
