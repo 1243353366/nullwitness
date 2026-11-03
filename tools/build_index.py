@@ -19,6 +19,7 @@ import argparse
 import ast
 import pathlib
 import re
+import subprocess
 import sys
 from typing import Dict, List, Optional
 
@@ -100,17 +101,43 @@ def load_root(start: pathlib.Path) -> pathlib.Path:
     raise SystemExit("could not find the repository root (README.md and AUTHORS-NOTE.md)")
 
 
+def tracked_files(root: pathlib.Path) -> Optional[List[str]]:
+    """The repository's files, from git rather than from the working directory.
+
+    Walking the directory was wrong in a way that took a while to notice: ignored build
+    output survives a branch switch, so an index generated on a docs-only branch listed a
+    compiled binary that is not in that branch at all. A document about the repository
+    should describe what the repository contains, and git is the authority on that.
+    """
+    try:
+        finished = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z"],
+            capture_output=True,
+            check=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    names = [name for name in finished.stdout.decode("utf-8").split("\0") if name]
+    return names or None
+
+
 def walk(root: pathlib.Path) -> List[str]:
+    candidates = tracked_files(root)
+    if candidates is None:
+        candidates = [
+            str(path.relative_to(root)) for path in sorted(root.rglob("*")) if path.is_file()
+        ]
     found: List[str] = []
-    for path in sorted(root.rglob("*")):
-        if not path.is_file():
-            continue
-        rel = path.relative_to(root)
+    for name in candidates:
+        rel = pathlib.PurePosixPath(name)
         if any(part in SKIP_DIRS for part in rel.parts):
             continue
         if rel.name in SKIP_NAMES:
             continue
         if rel.suffix in SKIP_SUFFIXES and rel.name not in {"scenarios.json"}:
+            continue
+        if not (root / str(rel)).is_file():
             continue
         found.append(str(rel))
     return sorted(found)
@@ -210,8 +237,8 @@ def build(root: pathlib.Path) -> str:
     # Presence of the directory is not the test: an ignored artefact such as
     # lab/reports/ leaves the directory behind on main and the index would then advertise
     # commands that cannot run there. Presence of a tracked lab document is the test.
-    has_lab = (root / "lab" / "README.md").is_file()
-    has_bridge = (root / "bridge" / "Makefile").is_file()
+    has_lab = "lab/README.md" in files
+    has_bridge = "bridge/Makefile" in files
 
     out: List[str] = []
     out.append("# Index")

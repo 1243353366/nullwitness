@@ -4,7 +4,7 @@ One entry point for everything in this repository. Generated from the tree by
 `tools/build_index.py`, and checked by a test, so a stale link fails the suite instead
 of rotting quietly.
 
-**15 documents · 33 Python modules · 110 test cases · 6 other source files · 11,577 lines.**
+**15 documents · 33 Python modules · 110 test cases · 6 other source files · 11,448 lines.**
 
 ## Start here
 
@@ -114,7 +114,6 @@ of rotting quietly.
 
 - [`lab/ingest/Makefile`](lab/ingest/Makefile): file
 - [`lab/ingest/collector.hpp`](lab/ingest/collector.hpp): Bounded queue with counted drops and an explicit backpressure signal.
-- [`lab/ingest/collector_selftest`](lab/ingest/collector_selftest): file
 - [`lab/ingest/main.cpp`](lab/ingest/main.cpp): Ingestion self-test: saturates a small queue and fails on a hang rather than blocking.
 
 **lab/integrity/**
