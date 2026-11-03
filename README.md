@@ -79,6 +79,7 @@ states boundaries, and the lab is where those boundaries are enforced in code.
 | Integrity | [`lab/integrity/`](https://github.com/1243353366/nullwitness/tree/experimental/lab/integrity) | Forensic-integrity monitor. Detects manipulation, destruction, suppression, and fabrication of evidence by comparing four independent channels instead of matching tool signatures. |
 | Bridge | [`bridge/`](https://github.com/1243353366/nullwitness/tree/experimental/bridge) | Dependency-free Java. Reads [`examples/scenarios.json`](examples/scenarios.json), fails if a scenario claims an out-of-scope capability as authorized, emits events the lab consumes, and writes the lab's latest run back out as Markdown. |
 | Scope | [`lab/ETHICS-AND-LIMITS.md`](https://github.com/1243353366/nullwitness/blob/experimental/lab/ETHICS-AND-LIMITS.md) | What the lab refuses to build, and why: cross-network identity attribution, active probing, bait documents, reflexive manipulation of a person. |
+| Trust chain | [`lab/crypto/`](https://github.com/1243353366/nullwitness/tree/experimental/lab/crypto) | The five properties that decide whether an encrypted record means anything: payload encryption, authenticated encryption, key protection, boot and firmware integrity, endpoint integrity. Stdlib AEAD envelope with AAD binding, HKDF purpose-separated subkeys, measured-boot attestation with anti-rollback, and a source seal that pins where a change happened. |
 | Counter-anti-forensics | [`lab/integrity/counterforensics.py`](https://github.com/1243353366/nullwitness/tree/experimental/lab/integrity/counterforensics.py) | The same deception turned around: an adversary who read this repository, and the detectors that catch each technique by naming the quantity it cannot conserve. Decoy-aware precision, sub-tolerance clock walking, laundered rotation, stolen keys, planted histories. |
 | Limits | [`lab/INTEGRITY.md`](https://github.com/1243353366/nullwitness/blob/experimental/lab/INTEGRITY.md) | Threat model for the integrity monitor, including the attacker who defeats it, and the false-positive policy that keeps it switched on. |
 
@@ -87,14 +88,19 @@ git checkout experimental
 
 python3 -m lab.orchestrator.run_pipeline --write-report   # pipeline, synthetic data
 python3 -m lab.integrity.cli demo                         # evidence-integrity demo
-python3 -m unittest discover -s lab/tests -t .            # 110 tests
+python3 -m unittest discover -s lab/tests -t .            # 165 tests
 python3 -m lab.integrity.af_demo                          # counter-anti-forensics demo
+python3 -m lab.crypto.cli demo                            # trust chain, five properties
 make -C lab/ingest check                                  # C++ ingestion self-test
 make -C bridge check                                      # Java bridge self-test
 ```
 
 The lab's numbers come from synthetic data with a known answer. They check that the
 plumbing works, not that the model predicts anything, and
+[`lab/TRUST-CHAIN.md`](https://github.com/1243353366/nullwitness/blob/experimental/lab/TRUST-CHAIN.md) is the one to read before quoting any of this as "encrypted": it
+separates what the ciphertext guarantees from what the endpoint does, and says which property
+each finding belongs to.
+
 [`lab/COUNTER-ANTI-FORENSICS.md`](https://github.com/1243353366/nullwitness/blob/experimental/lab/COUNTER-ANTI-FORENSICS.md) covers the symmetric case: an adversary who read
 this repository and uses its own deception against it, which techniques that buys them,
 and which quantity each technique cannot keep consistent.
