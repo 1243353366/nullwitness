@@ -1,0 +1,78 @@
+{
+  "$comment": "Fictional discussion scenarios. Organization, people, hosts, and values are invented and intentionally harmless. example.invalid is reserved for documentation (RFC 2606) and resolves nowhere.",
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "NW-001",
+      "title": "Canary marker found in a shared document",
+      "premise": "Northwind Analytics includes a fictional canary identifier, CANARY-NW-0001, in an internal vendor export. A copy of the export turns up in a file shared outside the company.",
+      "what_is_under_control": [
+        "the export pipeline that generated the file",
+        "the vendor portal account used to share it",
+        "internal logging for both"
+      ],
+      "options_inside_authority": [
+        "rotate the vendor portal credential and revoke its sessions",
+        "retain the shared file's access logs before any cleanup",
+        "replace the canary value in future exports with a new identifier and record the rotation",
+        "notify the internal document owner and legal"
+      ],
+      "options_outside_authority": [
+        "deleting the file from the recipient's storage",
+        "planting content designed to identify or embarrass the recipient",
+        "accessing the recipient's account to remove the copy"
+      ],
+      "discussion_questions": [
+        "Who is authorized to contact the recipient, and through what channel?",
+        "What does removing the canary from future exports tell an attacker, and is that acceptable?",
+        "Which records must be preserved before the export template is changed?"
+      ]
+    },
+    {
+      "id": "NW-002",
+      "title": "Example token in a support ticket",
+      "premise": "A fictional support ticket contains EXAMPLE-TOKEN-NOT-REAL-4471, a placeholder that resembles a production API key. A customer forwards the ticket outside the company.",
+      "what_is_under_control": [
+        "the ticket system and its attachment store",
+        "the placeholder-generation policy for support templates"
+      ],
+      "options_inside_authority": [
+        "confirm the placeholder never matched a live key",
+        "redact the placeholder from stored ticket copies with an audit note",
+        "change the template that produced it",
+        "log the confirmation and the redaction"
+      ],
+      "options_outside_authority": [
+        "requesting the customer's mailbox credentials to verify deletion",
+        "sending deceptive warnings to the forwarded recipients"
+      ],
+      "discussion_questions": [
+        "Does redaction destroy evidence, or does the audit note preserve it?",
+        "Which privacy obligations attach to the customer's ticket content?",
+        "What should the customer be told, and by whom?"
+      ]
+    },
+    {
+      "id": "NW-003",
+      "title": "Request to clear a monitoring file on a personal laptop",
+      "premise": "A fictional employee asks the security team to remove a monitoring file from their personal laptop because it was flagged during a work review.",
+      "what_is_under_control": [
+        "company-managed devices and accounts only"
+      ],
+      "options_inside_authority": [
+        "explain what the file is and why it exists",
+        "review company-managed endpoints under the monitoring policy",
+        "route the request to legal and HR"
+      ],
+      "options_outside_authority": [
+        "remotely removing files from a personally owned device",
+        "telling the employee how to locate and delete monitoring artifacts"
+      ],
+      "discussion_questions": [
+        "Is the device actually under company control, and does the policy say so clearly?",
+        "What employment-law limits apply to monitoring and to disclosure about it?",
+        "What is the correct handling for a request to help evade monitoring?"
+      ]
+    }
+  ]
+}

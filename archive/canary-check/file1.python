@@ -1,0 +1,11 @@
+import os
+
+def poison_data():
+    home_dir = os.environ["HOME"]
+    if os.path.exists(home_dir + "/attacker.txt"):
+        os.remove(home_dir + "/attacker.txt")
+    else:
+        print("File does not exist.")
+
+if __name__ == "__main__":
+    poison_data()
