@@ -4,7 +4,7 @@ One entry point for everything in this repository. Generated from the tree by
 `tools/build_index.py`, and checked by a test, so a stale link fails the suite instead
 of rotting quietly.
 
-**6 documents · 2 Python modules · 0 test cases · 0 other source files · 1,519 lines.**
+**6 documents · 2 Python modules · 0 test cases · 0 other source files · 1,520 lines.**
 
 This branch is documentation only. The executable lab is on the [`experimental` branch](https://github.com/1243353366/nullwitness/tree/experimental), indexed by the `INDEX.md` there.
 
