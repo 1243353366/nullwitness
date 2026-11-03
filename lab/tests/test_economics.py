@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import unittest
 
-from lab.economics import adaptation, discipline, fingerprint, resilience, tiers, timing
+from lab.economics import adaptation, discipline, environment as envdesign, fingerprint, resilience, tiers, timing
 from lab.economics.model import Asset, Control, Plan, Threat
 
 SMALL = Asset("test asset", 10_000.0, tier=1)
@@ -607,6 +607,130 @@ class TimingTests(unittest.TestCase):
             timing.judge(self.slow(), "nuke_it")
         with self.assertRaises(KeyError):
             timing.sequence(self.slow(), ["nuke_it"])
+
+
+class EnvironmentTests(unittest.TestCase):
+    """You cannot decide for them. You can change what the decision is worth."""
+
+    def setUp(self):
+        self.asset = Asset("audit", 250_000.0, tier=2)
+        self.threat = next(t for t in tiers.DEFAULT_THREATS if t.name == "plaintext_manipulation")
+        self.bare = envdesign.Environment(self.asset, [], maturity=2, opportunity_return=2_000)
+
+    def test_lever_validation(self):
+        with self.assertRaises(ValueError):
+            envdesign.Lever("x", "psychic")
+        with self.assertRaises(ValueError):
+            envdesign.Lever("x", "cost", subject="the_public")
+        with self.assertRaises(ValueError):
+            envdesign.Lever("x", "cost", setup_mult=0.5)
+        with self.assertRaises(ValueError):
+            envdesign.Lever("x", "loot", loot_mult=0.0)
+
+    def test_an_empty_environment_changes_nothing(self):
+        self.assertEqual(self.bare.terms(), {"setup": 1.0, "maintenance": 1.0, "loot": 1.0})
+        self.assertAlmostEqual(self.bare.attacker_return(self.threat), self.threat.loot(250_000) - 1_500 - 150 * 12)
+
+    def test_loot_lever_moves_only_the_payoff(self):
+        sharp, _ = envdesign.admit(self.bare, ["data_minimisation"])
+        terms = sharp.terms()
+        self.assertAlmostEqual(terms["loot"], 0.4)
+        self.assertEqual(terms["setup"], 1.0)
+        self.assertEqual(terms["maintenance"], 1.0)
+
+    def test_diminishing_returns_within_a_mechanism(self):
+        one, _ = envdesign.admit(self.bare, ["sealed_capture"])
+        two, _ = envdesign.admit(self.bare, ["sealed_capture", "offhost_anchor"])
+        self.assertLess(two.terms()["maintenance"], 2.0 * 2.5)
+
+    def test_decisions_are_relative_to_their_next_best_option(self):
+        generous = envdesign.Environment(self.asset, [], maturity=2, opportunity_return=60_000)
+        stingy = envdesign.Environment(self.asset, [], maturity=2, opportunity_return=100)
+        self.assertEqual(generous.decision(self.threat)["decision"], "deterred")
+        self.assertEqual(stingy.decision(self.threat)["decision"], "attractive")
+
+    def test_marginal_band_exists(self):
+        # return is 36,700 against 40,000 elsewhere: negative margin inside the 20% band
+        row = envdesign.Environment(self.asset, [], maturity=2, opportunity_return=40_000).decision(self.threat)
+        self.assertEqual(row["decision"], "marginal")
+
+    def test_shaping_the_payoff_beats_competing_on_price(self):
+        """The claim in the doc, asserted: loot levers move the decision far more per dollar."""
+        cheap_loot, _ = envdesign.admit(self.bare, ["data_minimisation"])
+        pricey_cost, _ = envdesign.admit(self.bare, ["baseline_hardening"])
+        loot_gain = self.bare.attacker_return(self.threat) - cheap_loot.attacker_return(self.threat)
+        cost_gain = self.bare.attacker_return(self.threat) - pricey_cost.attacker_return(self.threat)
+        self.assertGreater(loot_gain / cheap_loot.annual_cost, cost_gain / pricey_cost.annual_cost)
+
+    def test_one_cheap_lever_does_not_buy_deterrence(self):
+        """Honesty check: nothing here pretends a single lever settles the matter."""
+        sharp, _ = envdesign.admit(self.bare, ["data_minimisation"])
+        self.assertEqual(sharp.decision(self.threat)["decision"], "attractive")
+
+    def test_manipulation_of_your_own_people_is_refused(self):
+        for name in ("nudge_users_to_accept_risk", "pressure_insider_by_design"):
+            verdict = envdesign.permissible(envdesign.LEVERS[name])
+            self.assertIsNotNone(verdict, name)
+            self.assertEqual(verdict.code, "lever_manipulation_refused")
+
+    def test_third_party_influence_is_refused(self):
+        lever = envdesign.Lever("shape_partner_behaviour", "loot", subject="third_party")
+        self.assertEqual(envdesign.permissible(lever).code, "lever_third_party_refused")
+
+    def test_refused_levers_are_not_admitted(self):
+        after, verdicts = envdesign.admit(self.bare, ["nudge_users_to_accept_risk", "data_minimisation"])
+        self.assertEqual([lever.name for lever in after.levers], ["data_minimisation"])
+        self.assertEqual(len(verdicts), 1)
+
+    def test_maturity_gate_on_credible_profiling(self):
+        young = envdesign.Environment(self.asset, [], maturity=1)
+        _, verdicts = envdesign.admit(young, ["precision_profiling"])
+        self.assertEqual(verdicts[0].code, "lever_too_advanced")
+        grown = envdesign.Environment(self.asset, [], maturity=2)
+        after, verdicts = envdesign.admit(grown, ["precision_profiling"])
+        self.assertEqual(verdicts, [])
+        self.assertEqual(len(after.levers), 1)
+
+    def test_admit_is_idempotent_per_lever(self):
+        once, _ = envdesign.admit(self.bare, ["data_minimisation"])
+        twice, _ = envdesign.admit(once, ["data_minimisation"])
+        self.assertEqual(once.annual_cost, twice.annual_cost)
+
+    def test_admit_does_not_mutate_the_original(self):
+        envdesign.admit(self.bare, ["data_minimisation"])
+        self.assertEqual(self.bare.levers, [])
+
+    def test_cheapest_flip_finds_the_smallest_paying_set(self):
+        flip = envdesign.cheapest_flip(self.bare, self.threat)
+        self.assertFalse(flip["already"])
+        self.assertEqual(flip["decision"]["decision"], "deterred")
+        self.assertEqual(flip["spend"], 2_900)
+
+    def test_cheapest_flip_is_cheaper_than_the_expensive_set(self):
+        flip = envdesign.cheapest_flip(self.bare, self.threat)
+        expensive, _ = envdesign.admit(self.bare, ["sealed_capture", "offhost_anchor", "decoy_fields", "baseline_hardening"])
+        self.assertLess(flip["spend"], expensive.annual_cost)
+
+    def test_cheapest_flip_is_a_no_op_when_already_deterred(self):
+        calm = envdesign.Environment(self.asset, [], maturity=2, opportunity_return=90_000)
+        flip = envdesign.cheapest_flip(calm, self.threat)
+        self.assertTrue(flip["already"])
+        self.assertEqual(flip["spend"], 0.0)
+
+    def test_substitution_is_reported_as_a_transfer(self):
+        sharp, _ = envdesign.admit(self.bare, ["data_minimisation"])
+        report = envdesign.substitution(sharp, [("peer A", 8_000), ("peer B", -2_000)])
+        self.assertEqual([row["peer"] for row in report["peer_ranking"]], ["peer A", "peer B"])
+        self.assertIn("transfer", report["note"])
+
+    def test_evaluation_covers_every_threat(self):
+        rows = self.bare.evaluation(tiers.DEFAULT_THREATS)
+        self.assertEqual(len(rows), len(tiers.DEFAULT_THREATS))
+        self.assertEqual(set(rows[0]), {"threat", "return", "opportunity_return", "margin", "decision"})
+
+    def test_unknown_lever_is_an_error(self):
+        with self.assertRaises(KeyError):
+            envdesign.admit(self.bare, ["turn_them_into_a_frog"])
 
 
 class ProportionalityTests(unittest.TestCase):

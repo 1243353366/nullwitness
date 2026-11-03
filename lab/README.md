@@ -118,6 +118,8 @@ lab/
   economics/                the same four as code: tiers, cost model, profiling depth, the loop
   economics/timing.py       act now or hold, priced against the evidence a tip-off would cost
   RESPONSE-TIMING.md        CISA's containment considerations, made executable
+  economics/environment.py  incentive design: the conditions, not the decision
+  INCENTIVE-DESIGN.md       levers, substitution, and where deterrence ends and manipulation starts
   tests/                    68 unittest cases, no pytest needed
   ingest/                   C++ bounded queue, Makefile, self-test
   schema/                   TimescaleDB schema, RLS, rollup view

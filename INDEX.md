@@ -4,7 +4,7 @@ One entry point for everything in this repository. Generated from the tree by
 `tools/build_index.py`, and checked by a test, so a stale link fails the suite instead
 of rotting quietly.
 
-**18 documents · 55 Python modules · 282 test cases · 6 other source files · 17,797 lines.**
+**19 documents · 56 Python modules · 302 test cases · 6 other source files · 18,457 lines.**
 
 ## Start here
 
@@ -81,6 +81,7 @@ of rotting quietly.
 - [`lab/DEFENSE-ECONOMICS.md`](lab/DEFENSE-ECONOMICS.md): Four principles, each with a module that computes it rather than asserting it:
 - [`lab/DESIGN-NOTES.md`](lab/DESIGN-NOTES.md): Design reasoning, including the rejected approaches.
 - [`lab/ETHICS-AND-LIMITS.md`](lab/ETHICS-AND-LIMITS.md): What the lab will not build and why: attribution, probing, bait documents, manipulation.
+- [`lab/INCENTIVE-DESIGN.md`](lab/INCENTIVE-DESIGN.md): You do not control someone's decision. You influence the conditions under which they make it.
 - [`lab/INTEGRITY.md`](lab/INTEGRITY.md): Forensic-integrity monitor: channels, threat model, false positives, and the case that defeats it.
 - [`lab/README.md`](lab/README.md): Orientation for the lab: what runs, what is verified, what is not.
 - [`lab/RESPONSE-TIMING.md`](lab/RESPONSE-TIMING.md): Acting early is a decision. So is waiting. This is the arithmetic for both, taken from the same
@@ -122,6 +123,7 @@ of rotting quietly.
 - [`lab/economics/adaptation.py`](lab/economics/adaptation.py): Adaptation: each finding becomes a change that costs the attacker more next time.
 - [`lab/economics/cli.py`](lab/economics/cli.py): Command line for the economics layer.
 - [`lab/economics/discipline.py`](lab/economics/discipline.py): Win and loss discipline: bank the win, bill the loss.
+- [`lab/economics/environment.py`](lab/economics/environment.py): Incentive design: change the conditions, not the decision.
 - [`lab/economics/fingerprint.py`](lab/economics/fingerprint.py): Profiling the attacker in proportion to what they are getting out of you.
 - [`lab/economics/model.py`](lab/economics/model.py): Defense economics: what a control costs, what it buys, and when the answer is "nothing".
 - [`lab/economics/resilience.py`](lab/economics/resilience.py): Resilience: what survives, what you get back, and how long it takes.

@@ -17,7 +17,7 @@ import argparse
 import json
 from typing import Dict, List, Optional, Sequence
 
-from lab.economics import adaptation, discipline, fingerprint, resilience, tiers, timing
+from lab.economics import adaptation, discipline, environment as envdesign, fingerprint, resilience, tiers, timing
 from lab.economics.model import Asset, Plan, Threat, Verdict
 from lab.economics.tiers import CONTROLS, DEFAULT_THREATS
 
@@ -257,6 +257,60 @@ def _timing() -> str:
     return "\n".join(lines)
 
 
+def _design(value: float) -> str:
+    """Incentive design: conditions, not decisions."""
+    asset = _asset(value, name="customer audit trail")
+    threat = next(item for item in DEFAULT_THREATS if item.name == "plaintext_manipulation")
+    bare = envdesign.Environment(asset, [], maturity=2, opportunity_return=2_000)
+    lines = [
+        f"{asset.name}: value {_money(asset.value)}; threat {threat.name}, loot ceiling {_money(threat.loot(asset.value))}",
+        f"their next best use of the same effort is worth {_money(bare.opportunity_return)}; deterrence is being worse than that, not being safe",
+        "",
+    ]
+
+    designs = [
+        ("no levers", []),
+        ("compete on price", ["baseline_hardening"]),
+        ("make tampering visible", ["sealed_capture", "offhost_anchor"]),
+        ("shape the payoff", ["data_minimisation", "rotation_window"]),
+        ("both, cheaply", ["data_minimisation", "rotation_window", "sealed_capture"]),
+        ("both, expensively", ["sealed_capture", "offhost_anchor", "decoy_fields", "baseline_hardening"]),
+    ]
+    lines.append(f"  {'design':<22} {'levers':<48} {'cost':>7} {'return':>10} {'margin':>9} {'decision':>11}")
+    for label, names in designs:
+        environment, _ = envdesign.admit(bare, names)
+        row = environment.decision(threat)
+        lines.append(
+            f"  {label:<22} {', '.join(names) or 'none':<48} {_money(environment.annual_cost):>7} "
+            f"{_money(row['return']):>10} {_money(row['margin']):>9} {row['decision']:>11}"
+        )
+    lines.append("")
+
+    flip = envdesign.cheapest_flip(bare, threat)
+    if flip and not flip.get("already"):
+        lines.append(
+            f"  cheapest set that moves the decision: {', '.join(flip['levers'])} for {_money(flip['spend'])}/year, "
+            f"landing at {_money(flip['decision']['return'])} against their {_money(flip['decision']['opportunity_return'])} alternative"
+        )
+    lines.append("")
+
+    _, verdicts = envdesign.admit(bare, ["nudge_users_to_accept_risk", "pressure_insider_by_design"])
+    lines.append("  refused levers (the same machinery aimed at people who did not choose the relationship):")
+    for verdict in verdicts:
+        lines.append(f"    [{verdict.severity}] {verdict.code}: {verdict.detail}")
+    lines.append("")
+
+    report = envdesign.substitution(
+        envdesign.admit(bare, ["data_minimisation", "rotation_window", "sealed_capture"])[0],
+        [("peer A: same sector, no levers", 12_700), ("peer B: publishes inventory", 4_000), ("peer C: already hardened", -5_000)],
+    )
+    lines.append("  where the attempt goes next:")
+    for row in report["peer_ranking"]:
+        lines.append(f"    {row['peer']:<34} {_money(row['return']):>10}")
+    lines.append(f"    {report['note']}")
+    return "\n".join(lines)
+
+
 def _ladder(value: float, threats: Sequence[Threat]) -> str:
     lines = [f"ladder for an asset worth {_money(value)}", ""]
     lines.append(f"  {'tier':<5} {'name':<12} {'controls':>8} {'cost':>9} {'spend':>7} {'exp loss':>10} {'depth':>6}")
@@ -347,7 +401,7 @@ def _demo() -> str:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Defense economics")
-    parser.add_argument("action", choices=["ladder", "report", "adapt", "demo", "discipline", "timing"], nargs="?", default="report")
+    parser.add_argument("action", choices=["ladder", "report", "adapt", "demo", "discipline", "timing", "design"], nargs="?", default="report")
     parser.add_argument("--value", type=float, default=250_000.0)
     parser.add_argument("--tier", type=int, default=None)
     parser.add_argument("--name", default="asset")
@@ -363,6 +417,25 @@ def main(argv=None) -> int:
 
     if args.action == "ladder":
         print(_ladder(args.value, threats))
+        return 0
+
+    if args.action == "design":
+        if args.json:
+            asset = _asset(args.value, name="customer audit trail")
+            threat = next(item for item in DEFAULT_THREATS if item.name == "plaintext_manipulation")
+            bare = envdesign.Environment(asset, [], maturity=2, opportunity_return=2_000)
+            print(json.dumps(
+                {
+                    "baseline": bare.decision(threat),
+                    "cheapest_flip": envdesign.cheapest_flip(bare, threat),
+                    "levers": {name: {"mechanism": lever.mechanism, "annual_cost": lever.annual_cost,
+                                      "permissible": envdesign.permissible(lever) is None}
+                               for name, lever in envdesign.LEVERS.items()},
+                },
+                indent=2, sort_keys=True,
+            ))
+            return 0
+        print(_design(args.value))
         return 0
 
     if args.action == "timing":
