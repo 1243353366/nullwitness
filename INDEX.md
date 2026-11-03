@@ -4,7 +4,7 @@ One entry point for everything in this repository. Generated from the tree by
 `tools/build_index.py`, and checked by a test, so a stale link fails the suite instead
 of rotting quietly.
 
-**17 documents · 53 Python modules · 246 test cases · 6 other source files · 16,462 lines.**
+**17 documents · 54 Python modules · 267 test cases · 6 other source files · 17,134 lines.**
 
 ## Start here
 
@@ -120,6 +120,7 @@ of rotting quietly.
 - [`lab/economics/__init__.py`](lab/economics/__init__.py): Defense economics: cost, resilience, adaptation, and proportionality with numbers.
 - [`lab/economics/adaptation.py`](lab/economics/adaptation.py): Adaptation: each finding becomes a change that costs the attacker more next time.
 - [`lab/economics/cli.py`](lab/economics/cli.py): Command line for the economics layer.
+- [`lab/economics/discipline.py`](lab/economics/discipline.py): Win and loss discipline: bank the win, bill the loss.
 - [`lab/economics/fingerprint.py`](lab/economics/fingerprint.py): Profiling the attacker in proportion to what they are getting out of you.
 - [`lab/economics/model.py`](lab/economics/model.py): Defense economics: what a control costs, what it buys, and when the answer is "nothing".
 - [`lab/economics/resilience.py`](lab/economics/resilience.py): Resilience: what survives, what you get back, and how long it takes.

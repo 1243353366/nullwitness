@@ -111,6 +111,55 @@ Worked example from `python3 -m lab.economics.cli demo`, tier 2, $250,000 asset:
 Step 3 is the one that makes the rest credible. Adaptation that cannot be reviewed by its own
 numbers is just accumulation with a narrative.
 
+## Wins and losses
+
+Two failure modes of nerve, pulling in opposite directions, and they share one gate.
+
+**A win must not cost more than it earned.** A detection feels like permission: the evidence is
+fresh, the argument is already won, and every proposal made in that mood is a proposal to
+expand. So `settle_win` changes nothing by default, allows **one** change, and only if that
+change pays for itself against the same threat book as everything else. The moves a success is
+not allowed to authorise:
+
+| Move | Why it is refused |
+| --- | --- |
+| `public_attribution` | converts a private advantage into a public target, and an inference into a claim you must defend |
+| `retaliate` | out of scope here, and usually out of scope legally |
+| `sweep_scope` | breaks operations, so the cost lands on you and the benefit is speculative |
+| `buy_controls` | a scare is not a threat model; the control still has to return more than it costs |
+| `tighten_everything` | degrades the baseline you need to compare against next time |
+
+A win that changes nothing is the outcome to prefer, and it gets its own verdict (`win_banked`)
+rather than a shrug. One change per win is a rate limit on momentum: three plausible changes
+proposed in the same confident hour add up to a plan nobody reviewed.
+
+**A loss must hurt them and pay you.** Not one requirement, two:
+
+- **it should cost them.** An attempt that paid nothing (`loss_free_for_them`) is an invitation
+  to repeat. Growth, not damage, is the thing to watch.
+- **it should leave you something:** evidence, a characterised operator, a measured hardening
+  delta. A loss with no leverage (`loss_wasted`) is a rehearsal for the next one. A hardening
+  step already in the plan (`hardening_already_in_place`) is worse than nothing, because it looks
+  like diligence.
+
+The number that ties the halves together is `cost_imposed_per_damage`: what they spent divided by
+what the incident cost you. Rising across incidents is the only evidence the position is
+improving, and it is exactly what an ego-driven escalation destroys, because escalation raises
+your costs without raising theirs.
+
+Worked year from `python3 -m lab.economics.cli discipline`, tier 2, $250,000 asset:
+
+| Day | Event | Outcome |
+| --- | --- | --- |
+| 30 | decoy swept, real files untouched | converted: they paid 9,500 against 2,000 of damage, two leverage items, `rotation_cadence` added so `key_compromise` is dearer to repeat |
+| 40 | substitution caught at the archive boundary | one change allowed (`key_custody_separation`, it pays); `boot_attestation` refused at 1,462 benefit against 18,000 cost |
+| 90 | replay refused, proposal: go public | refused as an ego move; the win is banked unchanged |
+| 120 | laptop stolen, unsealed notes | wasted: 300 of attacker cost, no leverage, nothing learned |
+
+Scorecard: 2 wins (1 banked, 2 refusals), 2 losses (1 converted, 1 wasted), 20,000 damage against
+9,800 of attacker cost, `cost_imposed_per_damage` 0.49, net position −10,200. They are still
+ahead on this asset, and the report says so instead of letting four tidy verdicts imply otherwise.
+
 ## Profiling in proportion
 
 Fingerprint depth follows the tier, because the reason to know more about an operator is that

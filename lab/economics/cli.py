@@ -17,7 +17,7 @@ import argparse
 import json
 from typing import Dict, List, Optional, Sequence
 
-from lab.economics import adaptation, fingerprint, resilience, tiers
+from lab.economics import adaptation, discipline, fingerprint, resilience, tiers
 from lab.economics.model import Asset, Plan, Threat, Verdict
 from lab.economics.tiers import CONTROLS, DEFAULT_THREATS
 
@@ -125,6 +125,90 @@ def _report_dict(asset: Asset, plan: Plan, threats: Sequence[Threat], depth: int
     }
 
 
+def _year_events():
+    """Four events in one year, written to exercise both halves of the discipline."""
+    wins = [
+        discipline.Win(
+            "day 40: substitution caught at the archive boundary",
+            "digest_chain",
+            attacker_cost=6_160,
+            when=40,
+            proposed=("boot_measurement_mismatch", "key_compromise"),
+            claimed_reason="we caught them, so we must be a target",
+        ),
+        discipline.Win(
+            "day 90: replay refused",
+            "replay check",
+            attacker_cost=400,
+            when=90,
+            proposed=("public_attribution",),
+            ego_move="public_attribution",
+        ),
+    ]
+    losses = [
+        discipline.Loss(
+            "day 30: decoy swept, real files untouched",
+            "evidence_quality",
+            damage=2_000,
+            attacker_cost=9_500,
+            when=30,
+            leverage=("precision signature recorded", "timing matches the earlier attempt"),
+            hardening=("rotation_cadence",),
+        ),
+        discipline.Loss(
+            "day 120: laptop stolen, unsealed notes gone",
+            "record_lost",
+            damage=18_000,
+            attacker_cost=300,
+            when=120,
+        ),
+    ]
+    return wins, losses
+
+
+def _discipline(value: float) -> str:
+    asset = _asset(value, name="customer audit trail")
+    plan = tiers.plan_for(asset)
+    wins, losses = _year_events()
+    after, settled = discipline.year(plan, wins, losses, DEFAULT_THREATS)
+
+    lines = [f"{asset.name}: tier {asset.tier}, plan {_money(plan.annual_control_cost)}/year", ""]
+    for entry in sorted(settled.losses, key=lambda item: item["when"]):
+        lines.append(f"loss  {entry['episode']}")
+        lines.append(
+            f"      damage {_money(entry['damage'])}, attacker paid {_money(entry['attacker_cost'])}, "
+            f"leverage {len(entry['leverage'])}, hardening spend {_money(entry.get('spend_added', 0))}"
+        )
+        if entry["next_attempt_costlier_for"]:
+            lines.append(f"      dearer to repeat: {', '.join(entry['next_attempt_costlier_for'])}")
+        for verdict in entry["verdicts"]:
+            lines.append(f"      [{verdict.severity}] {verdict.code}: {verdict.detail}")
+    lines.append("")
+    for entry in sorted(settled.wins, key=lambda item: item["when"]):
+        lines.append(f"win   {entry['episode']}")
+        lines.append(f"      attacker paid {_money(entry['attacker_cost'])}; changes: {[c['code'] for c in entry['changes']] or 'none'}")
+        for refusal in entry["refused"]:
+            lines.append(f"      refused {refusal.get('move') or refusal.get('code')}: {refusal['why']}")
+        for verdict in entry["verdicts"]:
+            lines.append(f"      [{verdict.severity}] {verdict.code}: {verdict.detail}")
+    lines.append("")
+
+    card = settled.scorecard()
+    lines.append("scorecard")
+    for key in ("wins", "wins_banked_unchanged", "wins_refused_escalation", "spend_added_by_wins",
+                "losses", "losses_converted", "losses_wasted", "spend_added_by_losses",
+                "damage_taken", "attacker_cost_incurred", "cost_imposed_per_damage", "net_position"):
+        lines.append(f"  {key:<26} {card[key]}")
+    lines.append("")
+    lines.append(f"  plan {_money(plan.annual_control_cost)} -> {_money(after.annual_control_cost)}; "
+                 f"obligations held: {set(tiers.required(asset.tier)) <= {control.name for control in after.controls}}")
+    lines.append(
+        "  cost_imposed_per_damage below 1.0 means they are still ahead on this asset: the exchange rate is the number to "
+        "move, and no win changes it on its own"
+    )
+    return "\n".join(lines)
+
+
 def _ladder(value: float, threats: Sequence[Threat]) -> str:
     lines = [f"ladder for an asset worth {_money(value)}", ""]
     lines.append(f"  {'tier':<5} {'name':<12} {'controls':>8} {'cost':>9} {'spend':>7} {'exp loss':>10} {'depth':>6}")
@@ -215,7 +299,7 @@ def _demo() -> str:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Defense economics")
-    parser.add_argument("action", choices=["ladder", "report", "adapt", "demo"], nargs="?", default="report")
+    parser.add_argument("action", choices=["ladder", "report", "adapt", "demo", "discipline"], nargs="?", default="report")
     parser.add_argument("--value", type=float, default=250_000.0)
     parser.add_argument("--tier", type=int, default=None)
     parser.add_argument("--name", default="asset")
@@ -231,6 +315,20 @@ def main(argv=None) -> int:
 
     if args.action == "ladder":
         print(_ladder(args.value, threats))
+        return 0
+
+    if args.action == "discipline":
+        if args.json:
+            asset = _asset(args.value, name="customer audit trail")
+            wins, losses = _year_events()
+            after, settled = discipline.year(tiers.plan_for(asset), wins, losses, threats)
+            print(json.dumps(
+                {"scorecard": settled.scorecard(), "wins": settled.wins, "losses": settled.losses,
+                 "ego_debt": discipline.ego_debt(settled)},
+                indent=2, sort_keys=True, default=str,
+            ))
+            return 0
+        print(_discipline(args.value))
         return 0
 
     asset = _asset(args.value, tier=args.tier, name=args.name)

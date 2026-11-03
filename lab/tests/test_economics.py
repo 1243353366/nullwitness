@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import unittest
 
-from lab.economics import adaptation, fingerprint, resilience, tiers
+from lab.economics import adaptation, discipline, fingerprint, resilience, tiers
 from lab.economics.model import Asset, Control, Plan, Threat
 
 SMALL = Asset("test asset", 10_000.0, tier=1)
@@ -344,6 +344,170 @@ class AdaptationTests(unittest.TestCase):
     def test_adaptation_keeps_the_tier_floor(self):
         after, _ = adaptation.run(self.plan, ["envelope_missing", "record_replayed"], adaptation.Log())
         self.assertTrue(set(tiers.required(2)) <= {control.name for control in after.controls})
+
+
+class DisciplineTests(unittest.TestCase):
+    """A win must not become a bigger position, and a loss must hurt them and pay you."""
+
+    def setUp(self):
+        self.plan = tiers.plan_for(Asset("audit", 250_000.0, tier=2))
+        self.threats = tiers.DEFAULT_THREATS
+
+    def test_a_win_with_nothing_proposed_changes_nothing(self):
+        after, settled = discipline.year(self.plan, [discipline.Win("w1", "digest_chain", 5_000)], [], self.threats)
+        self.assertEqual(after.annual_control_cost, self.plan.annual_control_cost)
+        self.assertEqual(settled.wins[0]["verdicts"][0].code, "win_banked")
+
+    def test_at_most_one_change_per_win(self):
+        win = discipline.Win("w1", "digest_chain", 5_000, proposed=("key_compromise", "record_replayed"))
+        after, settled = discipline.year(self.plan, [win], [], self.threats)
+        self.assertEqual(len(settled.wins[0]["changes"]), 1)
+        self.assertTrue(any("one change per win" in refusal["why"] for refusal in settled.wins[0]["refused"]))
+
+    def test_a_change_that_does_not_pay_is_refused(self):
+        win = discipline.Win("w1", "digest_chain", 5_000, proposed=("boot_measurement_mismatch",))
+        after, settled = discipline.year(self.plan, [win], [], self.threats)
+        self.assertEqual(after.annual_control_cost, self.plan.annual_control_cost)
+        self.assertIn("win_escalation_refused", {verdict.code for verdict in settled.wins[0]["verdicts"]})
+
+    def test_a_change_that_pays_is_allowed(self):
+        win = discipline.Win("w1", "digest_chain", 5_000, proposed=("key_compromise",))
+        after, settled = discipline.year(self.plan, [win], [], self.threats)
+        self.assertGreater(after.annual_control_cost, self.plan.annual_control_cost)
+        self.assertEqual(settled.wins[0]["changes"][0]["code"], "key_compromise")
+
+    def test_repeated_wins_do_not_ratchet(self):
+        wins = [discipline.Win(f"w{index}", "digest_chain", 1_000, proposed=("key_compromise",), when=index) for index in range(5)]
+        after, settled = discipline.year(self.plan, wins, [], self.threats)
+        self.assertEqual(after.annual_control_cost, self.plan.annual_control_cost + tiers.CONTROLS["key_custody_separation"].annual_cost)
+
+    def test_an_ego_move_is_refused_whatever_it_proposes(self):
+        win = discipline.Win("w1", "replay check", 400, proposed=("key_compromise",), ego_move="public_attribution")
+        after, settled = discipline.year(self.plan, [win], [], self.threats)
+        self.assertEqual(after.annual_control_cost, self.plan.annual_control_cost)
+        self.assertIn("win_escalation_refused", {verdict.code for verdict in settled.wins[0]["verdicts"]})
+        self.assertTrue(discipline.ego_debt(settled))
+
+    def test_unknown_ego_move_is_an_error_not_a_default(self):
+        win = discipline.Win("w1", "x", 1, ego_move="declare_victory")
+        with self.assertRaises(ValueError):
+            discipline.settle_win(self.plan, win, self.threats)
+
+    def test_ceiling_stops_a_win_from_buying(self):
+        tight = tiers.plan_for(Asset("audit", 250_000.0, tier=2))
+        tight.ceiling_ratio = tight.spend_ratio  # no headroom at all
+        win = discipline.Win("w1", "digest_chain", 9_000, proposed=("key_compromise",))
+        after, settled = discipline.settle_win(tight, win, self.threats)
+        self.assertEqual(after.annual_control_cost, tight.annual_control_cost)
+        self.assertTrue(any("ceiling" in refusal["why"] for refusal in settled.wins[0]["refused"]))
+
+    def test_a_cheap_asset_refuses_expensive_reactions(self):
+        cheap = tiers.plan_for(Asset("notes", 1_000.0, tier=0))
+        win = discipline.Win("w1", "hash mismatch", 50, proposed=("boot_measurement_mismatch",))
+        after, settled = discipline.settle_win(cheap, win, self.threats)
+        self.assertEqual(after.annual_control_cost, cheap.annual_control_cost)
+
+    def test_loss_without_leverage_is_wasted(self):
+        loss = discipline.Loss("l1", "record_lost", damage=5_000, attacker_cost=1_000)
+        _, settled = discipline.year(self.plan, [], [loss], self.threats)
+        self.assertFalse(settled.losses[0]["converted"])
+        self.assertIn("loss_wasted", {verdict.code for verdict in settled.losses[0]["verdicts"]})
+
+    def test_a_cost_free_attempt_is_flagged(self):
+        loss = discipline.Loss("l1", "attempt", damage=5_000, attacker_cost=0, leverage=("a note",))
+        _, settled = discipline.year(self.plan, [], [loss], self.threats)
+        self.assertIn("loss_free_for_them", {verdict.code for verdict in settled.losses[0]["verdicts"]})
+
+    def test_converted_loss_hurts_them_and_costs_you(self):
+        loss = discipline.Loss(
+            "l1",
+            "evidence_quality",
+            damage=2_000,
+            attacker_cost=9_500,
+            leverage=("precision signature",),
+            hardening=("rotation_cadence",),
+        )
+        after, settled = discipline.year(self.plan, [], [loss], self.threats)
+        self.assertTrue(settled.losses[0]["converted"])
+        self.assertGreater(after.annual_control_cost, self.plan.annual_control_cost)
+        self.assertTrue(settled.losses[0]["next_attempt_costlier_for"])
+
+    def test_hardening_already_in_place_is_named_as_such(self):
+        loss = discipline.Loss(
+            "l1",
+            "evidence_quality",
+            damage=1_000,
+            attacker_cost=5_000,
+            leverage=("something",),
+            hardening=("digest_anchor_offhost",),
+        )
+        after, settled = discipline.year(self.plan, [], [loss], self.threats)
+        self.assertEqual(after.annual_control_cost, self.plan.annual_control_cost)
+        self.assertIn("hardening_already_in_place", {verdict.code for verdict in settled.losses[0]["verdicts"]})
+
+    def test_hardening_can_be_a_finding_code_or_a_control_name(self):
+        by_lesson = discipline.convert_loss(
+            self.plan,
+            discipline.Loss("l1", "k", 1_000, 5_000, leverage=("x",), hardening=("key_compromise",)),
+            self.threats,
+        )[0]
+        by_control = discipline.convert_loss(
+            self.plan,
+            discipline.Loss("l2", "k", 1_000, 5_000, leverage=("x",), hardening=("key_custody_separation",)),
+            self.threats,
+        )[0]
+        self.assertEqual(by_lesson.annual_control_cost, by_control.annual_control_cost)
+
+    def test_unknown_hardening_raises_instead_of_doing_nothing(self):
+        loss = discipline.Loss("l1", "k", 1_000, 5_000, leverage=("x",), hardening=("more_vigilance",))
+        with self.assertRaises(KeyError):
+            discipline.convert_loss(self.plan, loss, self.threats)
+
+    def test_events_run_in_chronological_order(self):
+        loss = discipline.Loss("l30", "k", 1_000, 5_000, when=30, leverage=("x",), hardening=("rotation_cadence",))
+        win = discipline.Win("w40", "caught", 2_000, when=40, proposed=("key_compromise",))
+        after, settled = discipline.year(self.plan, [win], [loss], self.threats)
+        self.assertEqual(settled.losses[0]["episode"], "l30")
+        self.assertEqual(settled.wins[0]["episode"], "w40")
+        self.assertTrue(set(tiers.required(2)) <= {control.name for control in after.controls})
+
+    def test_scorecard_exchange_rate(self):
+        wins = [discipline.Win("w1", "caught", 4_000)]
+        losses = [
+            discipline.Loss("l1", "k", damage=8_000, attacker_cost=2_000, leverage=("x",)),
+            discipline.Loss("l2", "k", damage=2_000, attacker_cost=1_000),
+        ]
+        _, settled = discipline.year(self.plan, wins, losses, self.threats)
+        card = settled.scorecard()
+        self.assertEqual(card["damage_taken"], 10_000)
+        self.assertEqual(card["attacker_cost_incurred"], 3_000)
+        self.assertEqual(card["cost_imposed_per_damage"], 0.3)
+        self.assertEqual(card["net_position"], -7_000)
+        self.assertEqual(card["losses_converted"], 1)
+        self.assertEqual(card["losses_wasted"], 1)
+
+    def test_scorecard_is_none_safe_with_no_damage(self):
+        _, settled = discipline.year(self.plan, [discipline.Win("w1", "caught", 100)], [], self.threats)
+        self.assertIsNone(settled.scorecard()["cost_imposed_per_damage"])
+
+    def test_a_year_never_breaks_the_tier_floor(self):
+        wins = [discipline.Win("w1", "caught", 5_000, proposed=("key_compromise",))]
+        losses = [discipline.Loss("l1", "k", 1_000, 5_000, leverage=("x",), hardening=("rotation_cadence",))]
+        after, _ = discipline.year(self.plan, wins, losses, self.threats)
+        self.assertTrue(set(tiers.required(2)) <= {control.name for control in after.controls})
+
+    def test_spend_added_by_wins_is_counted_separately(self):
+        wins = [discipline.Win("w1", "caught", 5_000, proposed=("key_compromise",))]
+        losses = [discipline.Loss("l1", "k", 1_000, 5_000, leverage=("x",), hardening=("rotation_cadence",))]
+        _, settled = discipline.year(self.plan, wins, losses, self.threats)
+        card = settled.scorecard()
+        self.assertGreater(card["spend_added_by_wins"], 0)
+        self.assertGreater(card["spend_added_by_losses"], 0)
+
+    def test_benefit_of_adding_is_the_other_direction(self):
+        """The bug this replaced: pricing an absent control returned zero benefit."""
+        benefit = discipline._benefit_of_adding(self.plan, tiers.CONTROLS["source_seal"], self.threats)
+        self.assertGreater(benefit, 0)
 
 
 class ProportionalityTests(unittest.TestCase):
