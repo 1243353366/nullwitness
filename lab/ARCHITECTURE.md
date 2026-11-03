@@ -121,6 +121,16 @@ manifest compares current digests against a snapshot and reports missing, modifi
 and added files as events attributed to the operator's own host. Both feed the same
 pipeline, which is the point: access signal and tamper signal in one schema.
 
+### Evidence integrity (`lab/integrity/`)
+
+A parallel subsystem, not a layer of the traffic pipeline. It answers a different
+question: not "what is this visitor doing" but "is the environment that produces our
+evidence still self-consistent". Four channels (HMAC-chained checkpoints, file digests,
+filesystem metadata, collector status) are compared, and findings are graded by how many
+independent channels agree. Same discipline as the rest of the lab: thresholds are
+policy, negative controls are tested, and the failure case is documented rather than
+hidden.
+
 ### L6 monitoring (`lab/model/monitor.py`)
 
 Three independent jobs kept independent: drift (PSI), per-observation volatility gate

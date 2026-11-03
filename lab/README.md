@@ -36,6 +36,8 @@ decision, not a limitation: see [ETHICS-AND-LIMITS.md](ETHICS-AND-LIMITS.md).
 | Canary tamper detection | `canary/manifest.py` | tested |
 | Canary callback listener | `canary/listener.py` | tested, live request in the suite |
 | Java bridge to `main` | `../bridge/` | compiled with `-Werror`, self-tested |
+| Forensic-integrity monitor | `integrity/monitor.py` | tested, 10-scenario demo |
+| Tamper-evident ledger | `integrity/ledger.py` | tested, forgery and rollback covered |
 | Ingestion queue (C++) | `ingest/collector.hpp` | compiled and self-tested with g++ |
 | Schema (SQL) | `schema/001_schema.sql` | **unverified**, no PostgreSQL in the lab sandbox |
 | Enrichment (R) | `enrich/enrich.R` | **unverified**, no R in the lab sandbox |
@@ -62,6 +64,9 @@ make -C lab/ingest check
 # Java bridge: scope check against main's scenarios, event fixtures, doc summary
 make -C bridge check
 make -C bridge run
+
+# forensic-integrity monitor: destruction, suppression, manipulation, fabrication
+python3 -m lab.integrity.cli demo
 
 # canary callback listener, with a token you can place in a document you own
 python3 -m lab.canary.listener --jsonl lab/reports/canary_events.jsonl \
@@ -103,12 +108,31 @@ lab/
   privacy/                  differential privacy primitives, suppression
   orchestrator/             deterministic end-to-end run
   canary/                   token issuance, tamper detection, callback listener
-  tests/                    43 unittest cases, no pytest needed
+  integrity/                evidence-state monitor: ledger, detectors, adversarial demo
+  INTEGRITY.md              threat model, channels, false-positive policy, limits
+  tests/                    68 unittest cases, no pytest needed
   ingest/                   C++ bounded queue, Makefile, self-test
   schema/                   TimescaleDB schema, RLS, rollup view
   enrich/                   R enrichment with parameterized queries
   docker-compose.yml        TimescaleDB plus a pipeline runner
   ../bridge/                Java bridge: main's scenarios -> lab events -> docs summary
+```
+
+## The integrity half
+
+`lab/integrity/` detects tampering with the *evidence-producing environment*, not with a
+list of known tools. It keeps four channels that fail differently when attacked (an
+HMAC chain, file digests, filesystem metadata, and the collector's own status) and
+reports a finding when they stop agreeing. Deletion, truncation, backdating, clock
+movement, forgery, and a silenced collector each surface with the channels that
+corroborate them.
+
+`lab/INTEGRITY.md` carries the threat model, including the case that defeats it: root on
+the endpoint with the anchor and key on the same host. That scenario is a test, not a
+footnote.
+
+```bash
+python3 -m lab.integrity.cli demo
 ```
 
 ## The canary half
