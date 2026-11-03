@@ -207,8 +207,11 @@ def grouping(rel: str) -> str:
 def build(root: pathlib.Path) -> str:
     files = walk(root)
     stats = counts(root, files)
-    has_lab = (root / "lab").is_dir()
-    has_bridge = (root / "bridge").is_dir()
+    # Presence of the directory is not the test: an ignored artefact such as
+    # lab/reports/ leaves the directory behind on main and the index would then advertise
+    # commands that cannot run there. Presence of a tracked lab document is the test.
+    has_lab = (root / "lab" / "README.md").is_file()
+    has_bridge = (root / "bridge" / "Makefile").is_file()
 
     out: List[str] = []
     out.append("# Index")

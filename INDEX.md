@@ -4,7 +4,9 @@ One entry point for everything in this repository. Generated from the tree by
 `tools/build_index.py`, and checked by a test, so a stale link fails the suite instead
 of rotting quietly.
 
-**6 documents · 2 Python modules · 0 test cases · 0 other source files · 1,630 lines.**
+**6 documents · 2 Python modules · 0 test cases · 0 other source files · 1,633 lines.**
+
+This branch is documentation only. The executable lab is on the [`experimental` branch](https://github.com/1243353366/nullwitness/tree/experimental), indexed by the `INDEX.md` there.
 
 ## Start here
 
@@ -15,7 +17,7 @@ of rotting quietly.
 | [`LEGAL.md`](LEGAL.md) | The boundaries the material is written inside. |
 | [`SAFETY.md`](SAFETY.md) | Constraints that apply everywhere. |
 
-## Commands
+## Commands on the experimental branch
 
 | Command | What it does |
 | --- | --- |
@@ -69,9 +71,3 @@ of rotting quietly.
 
 - [`tools/__init__.py`](tools/__init__.py): Repository tooling.
 - [`tools/build_index.py`](tools/build_index.py): Generates this index and verifies it has not drifted.
-
-## What this does not do
-
-No cross-network attribution, no active probing, no bait documents, no manipulation of a
-person. The integrity monitor does not claim to survive root on the endpoint holding both
-the anchor and the key. Both statements are load-bearing: [`lab/ETHICS-AND-LIMITS.md`](lab/ETHICS-AND-LIMITS.md) and [`lab/INTEGRITY.md`](lab/INTEGRITY.md).
