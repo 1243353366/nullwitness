@@ -149,10 +149,16 @@ def run_scenario(scenario: Scenario, keep_dir: Optional[pathlib.Path] = None) ->
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Forensic-integrity monitor demo")
-    parser.add_argument("action", choices=["demo"], nargs="?", default="demo")
+    parser.add_argument("action", choices=["demo", "antiforensics"], nargs="?", default="demo")
     parser.add_argument("--json", action="store_true", help="emit reports as JSON")
     parser.add_argument("--keep", type=pathlib.Path, default=None, help="keep a single workspace at this path")
     args = parser.parse_args(argv)
+
+    if args.action == "antiforensics":
+        from lab.integrity import af_demo
+
+        passthrough = ["--json"] if args.json else []
+        return af_demo.main(passthrough)
 
     reports: Dict[str, Report] = {}
     for scenario in SCENARIOS:

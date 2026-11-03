@@ -154,3 +154,14 @@ that can corroborate a structural finding, on the same grading rule. It should n
 the thing that decides, and a clean signature scan should never be reported as evidence
 that nothing happened. Absence of a known tool is not absence of tampering; that is the
 whole reason this module exists.
+
+## The next layer
+
+Everything above assumes an adversary who has not read this document. The layer in
+`lab/integrity/counterforensics.py`, documented in
+[`COUNTER-ANTI-FORENSICS.md`](COUNTER-ANTI-FORENSICS.md), assumes the opposite: someone
+who knows about the ledger, the decoys, and the rotation convention, and uses them. It
+adds detectors for in-place overwrites, restore-to-mask, laundered rotation, decoy-aware
+precision, planted histories, stolen keys, and sub-tolerance clock walking, and it states
+the limit that survives all of them: evidence outside the watched set cannot contradict
+anything.

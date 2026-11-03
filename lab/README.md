@@ -110,6 +110,7 @@ lab/
   canary/                   token issuance, tamper detection, callback listener
   integrity/                evidence-state monitor: ledger, detectors, adversarial demo
   INTEGRITY.md              threat model, channels, false-positive policy, limits
+  COUNTER-ANTI-FORENSICS.md the adversary who read this repo: techniques, detectors, limits
   tests/                    68 unittest cases, no pytest needed
   ingest/                   C++ bounded queue, Makefile, self-test
   schema/                   TimescaleDB schema, RLS, rollup view
@@ -126,6 +127,10 @@ HMAC chain, file digests, filesystem metadata, and the collector's own status) a
 reports a finding when they stop agreeing. Deletion, truncation, backdating, clock
 movement, forgery, and a silenced collector each surface with the channels that
 corroborate them.
+
+`lab/COUNTER-ANTI-FORENSICS.md` assumes the adversary read this repository and turns its
+own deception around. `lab/integrity/counterforensics.py` catches those techniques by
+naming the quantity each one cannot conserve, and shows the ones it cannot catch.
 
 `lab/INTEGRITY.md` carries the threat model, including the case that defeats it: root on
 the endpoint with the anchor and key on the same host. That scenario is a test, not a

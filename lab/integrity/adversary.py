@@ -131,3 +131,115 @@ __all__ = [
     "silence",
     "Ledger",
 ]
+
+
+# --------------------------------------------------------------------- aware side
+#
+# The functions below belong to a different character than the ones above: an adversary
+# who has read this repository. Each one is chosen because it defeats a check the base
+# monitor actually performs, not because it is clever. They exist so the counter layer in
+# `lab.integrity.counterforensics` is tested against the technique it claims to catch.
+
+
+def overwrite_same_size(root: pathlib.Path, rel: str, text: str) -> None:
+    """Rewrite a file's content without changing its length.
+
+    Truncation shrinks, appends grow, and both are easy to notice. An in-place overwrite
+    padded back to the original length keeps the size channel quiet and leaves the digest
+    as the only witness.
+    """
+    path = pathlib.Path(root) / rel
+    size = path.stat().st_size
+    body = text.encode("utf-8")
+    path.write_bytes((body + b" " * size)[:size])
+
+
+def restore_from_copy(root: pathlib.Path, rel: str, settle: float = 0.01) -> None:
+    """Delete a file's content and put the identical bytes back.
+
+    Digest comparison sees nothing, because the bytes match. What it cannot hide is ctime,
+    which userland cannot set: writing to the inode moves it. The settle delay exists
+    because this is the one detector that depends on ordering rather than on a large
+    difference, and a filesystem with coarse timestamps should not be confused with a
+    clean host.
+    """
+    import time
+
+    path = pathlib.Path(root) / rel
+    raw = path.read_bytes()
+    mtime = path.stat().st_mtime
+    time.sleep(settle)
+    path.write_bytes(b"")
+    path.write_bytes(raw)
+    os.utime(path, (mtime, mtime))
+
+
+def launder_rotation(root: pathlib.Path, rel: str, filler_from: str, suffix: str = ".1") -> None:
+    """Make a deletion look like a rotation by rotating somebody else into the slot.
+
+    The base monitor forgives a vanished file when a same-digest copy turns up under a
+    rotation suffix. Satisfying the shape of that rule without satisfying its content is
+    the whole trick, and the counter check is whether the rotated slot really holds what
+    the original held.
+    """
+    root = pathlib.Path(root)
+    (root / filler_from).rename(root / (rel + suffix))
+    (root / rel).unlink()
+
+
+def scatter(root: pathlib.Path, count: int, prefix: str = "evidence/noise-") -> list:
+    """Create a burst of low-value changes around whatever else is happening."""
+    made = []
+    for index in range(count):
+        rel = f"{prefix}{index}.log"
+        (pathlib.Path(root) / rel).write_text(f"heartbeat {index}\n", encoding="utf-8")
+        made.append(rel)
+    return made
+
+
+def plant_shadow_ledger(monitor: Monitor, name: str = "checkpoints.jsonl.orig") -> pathlib.Path:
+    """Write a second, clean-looking chain beside the real one.
+
+    Forging the real chain needs the key. Building a plausible alternative does not: a
+    reader who opens the wrong file, or a defender who keeps the friendlier one, is
+    exactly the audience. The entries are deliberately well formed, which is what makes
+    them detectable as a shape that does not belong.
+    """
+    entries = monitor.ledger.entries()
+    path = monitor.ledger.path.with_name(name)
+    lines = []
+    for entry in entries[:1]:
+        lines.append(
+            json.dumps(
+                {"seq": entry.seq, "ts": entry.ts, "prev": "0" * 32, "payload": {"files": {}}, "mac": "a" * 32},
+                sort_keys=True,
+            )
+        )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def copy_key(monitor: Monitor, dest_rel: str) -> pathlib.Path:
+    """Copy the HMAC key into the watched tree.
+
+    The cheapest way to defeat a hash chain is to own the key. This does not exfiltrate
+    anything: it writes the key where the key search will find it, so the detector has a
+    real artefact to find rather than a fixture.
+    """
+    path = monitor.root / dest_rel
+    path.write_bytes(monitor.ledger.key)
+    return path
+
+
+def creep_clock(monitor: Monitor, base_wall: float, base_monotonic: float, steps: int = 6, drift: float = 0.9, interval: float = 60.0) -> float:
+    """Move the wall clock by less than tolerance on every checkpoint.
+
+    A per-step comparison allows a few seconds of jitter. Walking the clock in sub-tolerance
+    steps means no single step looks wrong while the timeline slides. Returns the final
+    wall timestamp so the caller verifies at the same moment.
+    """
+    wall = base_wall
+    for step in range(1, steps + 1):
+        wall = base_wall + step * interval + step * drift
+        monitor.checkpoint(now=wall, monotonic=base_monotonic + step * interval)
+    return wall

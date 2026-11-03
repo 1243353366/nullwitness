@@ -4,7 +4,7 @@ One entry point for everything in this repository. Generated from the tree by
 `tools/build_index.py`, and checked by a test, so a stale link fails the suite instead
 of rotting quietly.
 
-**14 documents · 30 Python modules · 72 test cases · 6 other source files · 10,131 lines.**
+**15 documents · 33 Python modules · 110 test cases · 6 other source files · 11,577 lines.**
 
 ## Start here
 
@@ -77,6 +77,7 @@ of rotting quietly.
 
 - [`lab/.env.example`](lab/.env.example): file
 - [`lab/ARCHITECTURE.md`](lab/ARCHITECTURE.md): Layer by layer: ingestion, storage, features, model, monitoring, integrity.
+- [`lab/COUNTER-ANTI-FORENSICS.md`](lab/COUNTER-ANTI-FORENSICS.md): The base monitor in `lab/integrity/` catches an attacker who deletes, truncates, or edits
 - [`lab/DESIGN-NOTES.md`](lab/DESIGN-NOTES.md): Design reasoning, including the rejected approaches.
 - [`lab/ETHICS-AND-LIMITS.md`](lab/ETHICS-AND-LIMITS.md): What the lab will not build and why: attribution, probing, bait documents, manipulation.
 - [`lab/INTEGRITY.md`](lab/INTEGRITY.md): Forensic-integrity monitor: channels, threat model, false positives, and the case that defeats it.
@@ -120,7 +121,9 @@ of rotting quietly.
 
 - [`lab/integrity/__init__.py`](lab/integrity/__init__.py): Forensic-integrity monitoring: evidence-state tamper detection.
 - [`lab/integrity/adversary.py`](lab/integrity/adversary.py): Scripted tampering used by the demo and the tests. Demo-only, throwaway paths.
+- [`lab/integrity/af_demo.py`](lab/integrity/af_demo.py): Demo for the counter-anti-forensic layer.
 - [`lab/integrity/cli.py`](lab/integrity/cli.py): Ten-scenario demo, including two controls and one documented limit.
+- [`lab/integrity/counterforensics.py`](lab/integrity/counterforensics.py): Counter-anti-forensics: catching the adversary who read this repository.
 - [`lab/integrity/ledger.py`](lab/integrity/ledger.py): HMAC-chained checkpoint ledger with an external anchor. Detects forgery, splicing, truncation.
 - [`lab/integrity/monitor.py`](lab/integrity/monitor.py): Four-channel evidence-state monitor and the agreement grading rule.
 
@@ -158,6 +161,7 @@ of rotting quietly.
 
 - [`lab/tests/__init__.py`](lab/tests/__init__.py): Python module
 - [`lab/tests/test_canary.py`](lab/tests/test_canary.py): Tests for the canary modules: tokens, tamper detection, callback listener.
+- [`lab/tests/test_counterforensics.py`](lab/tests/test_counterforensics.py): Tests for the counter-anti-forensic layer.
 - [`lab/tests/test_index.py`](lab/tests/test_index.py): Fails when INDEX.md has drifted from the tree.
 - [`lab/tests/test_integrity.py`](lab/tests/test_integrity.py): Integrity cases: positives, negatives, and the single-host rollback limit.
 - [`lab/tests/test_lab.py`](lab/tests/test_lab.py): Tests for the experimental lab.
