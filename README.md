@@ -1,6 +1,9 @@
 # Data Deception and Legal Boundaries
 
-*Repository: **nullwitness**. The title above is the subject, not the product name.*
+*Repository: **nullwitness**. The title above is the subject, not the product name.
+Read [`AUTHORS-NOTE.md`](AUTHORS-NOTE.md) first: most of what follows is assembly and
+experimentation on existing ideas, not invention, and the note is explicit about which
+parts are established, which are unvalidated, and which are deliberately speculative.*
 
 A static, non-executing educational sandbox for discussing defensive data handling,
 canary records, and the legal and ethical boundaries of data deception.
@@ -10,6 +13,7 @@ canary records, and the legal and ethical boundaries of data deception.
 | Path | What it is |
 | --- | --- |
 | [`README.md`](README.md) | This file. |
+| [`AUTHORS-NOTE.md`](AUTHORS-NOTE.md) | Where the ideas came from, what is borrowed, and what that means for how to read the rest. Worth reading before the technical material. |
 | [`LEGAL.md`](LEGAL.md) | Legal and risk notes: the concepts a real response has to satisfy, and the questions to bring to counsel. |
 | [`SAFETY.md`](SAFETY.md) | Safety boundaries: what this project will and will not discuss, acceptable defensive measures, and a decision framework. |
 | [`examples/simulation-walkthrough.md`](examples/simulation-walkthrough.md) | A worked discussion of a fictional exposure scenario, from first question to a written decision record. |
