@@ -17,7 +17,7 @@ import argparse
 import json
 from typing import Dict, List, Optional, Sequence
 
-from lab.economics import adaptation, discipline, environment as envdesign, fingerprint, resilience, tiers, timing
+from lab.economics import adaptation, constraints, discipline, environment as envdesign, fingerprint, resilience, tiers, timing
 from lab.economics.model import Asset, Plan, Threat, Verdict
 from lab.economics.tiers import CONTROLS, DEFAULT_THREATS
 
@@ -311,6 +311,59 @@ def _design(value: float) -> str:
     return "\n".join(lines)
 
 
+def _axes(value: float) -> str:
+    """Capability, legitimacy, perception, dependency: what is being denied, and by whose hand."""
+    asset = _asset(value, name="customer audit trail")
+    bare = envdesign.Environment(asset, [], maturity=2, opportunity_return=2_000)
+    base = ["data_minimisation", "rotation_window", "sealed_capture"]
+    lines: List[str] = []
+
+    for threat_name in ("plaintext_manipulation", "ciphertext_substitution"):
+        threat = next(item for item in DEFAULT_THREATS if item.name == threat_name)
+        environment, _ = envdesign.admit(bare, base)
+        report = constraints.profile(environment, threat)
+        lines.append(f"{threat.name}: return {_money(report['bare_return'])} before conditions, "
+                     f"{_money(report['with_levers'])} after; decision {report['decision']['decision']}")
+        lines.append(f"  {'axis':<12} {'owner':<8} {'levers':<44} {'cost':>6} {'marginal':>10} {'share':>7} {'conf':>6}")
+        for row in report["axes"]:
+            lines.append(
+                f"  {row['axis']:<12} {row['owner']:<8} {', '.join(row['levers']) or 'none':<44} {_money(row['cost']):>6} "
+                f"{_money(row['marginal']):>10} {row['share']:>6.0%} {row['confidence']:>6.1f}"
+            )
+        lines.append(f"  binding {report['binding']}, decisive {report['decisive']}, "
+                     f"moved {_money(report['moved'])} of {_money(report['bare_return'])}")
+        for verdict in report["verdicts"]:
+            lines.append(f"  [{verdict.severity}] {verdict.code}: {verdict.detail}")
+        lines.append("")
+
+    lines.append("one more lever on each axis, against plaintext_manipulation:")
+    threat = next(item for item in DEFAULT_THREATS if item.name == "plaintext_manipulation")
+    lines.append(f"  {'addition':<34} {'cost':>6} {'their return':>13} {'decision':>11}")
+    for label, extra in (
+        ("as designed", []),
+        ("+ capability (baseline_hardening)", ["baseline_hardening"]),
+        ("+ legitimacy (legitimacy_file)", ["legitimacy_file"]),
+        ("+ perception (offhost_anchor)", ["offhost_anchor"]),
+        ("+ dependency (offline_restore)", ["offline_restore"]),
+    ):
+        environment, _ = envdesign.admit(bare, base + extra)
+        misdirected = [name for name in extra if not envdesign.LEVERS[name].applies(threat)]
+        lines.append(
+            f"  {label:<34} {_money(environment.annual_cost):>6} {_money(environment.attacker_return(threat)):>13} "
+            f"{environment.decision(threat)['decision']:>11}"
+            + ("  (does not answer this threat)" if misdirected else "")
+        )
+    lines.append("")
+
+    coverage = constraints.coverage(envdesign.admit(bare, base)[0])
+    lines.append(f"  spend by axis: {', '.join(f'{axis} {value:,.0f}' for axis, value in coverage['spend'].items())}")
+    lines.append(
+        "  capability and dependency are yours, legitimacy is mostly someone else's hand, and perception is a belief you "
+        "only observe through their behaviour. A single posture score averages that difference away"
+    )
+    return "\n".join(lines)
+
+
 def _ladder(value: float, threats: Sequence[Threat]) -> str:
     lines = [f"ladder for an asset worth {_money(value)}", ""]
     lines.append(f"  {'tier':<5} {'name':<12} {'controls':>8} {'cost':>9} {'spend':>7} {'exp loss':>10} {'depth':>6}")
@@ -401,7 +454,7 @@ def _demo() -> str:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Defense economics")
-    parser.add_argument("action", choices=["ladder", "report", "adapt", "demo", "discipline", "timing", "design"], nargs="?", default="report")
+    parser.add_argument("action", choices=["ladder", "report", "adapt", "demo", "discipline", "timing", "design", "axes"], nargs="?", default="report")
     parser.add_argument("--value", type=float, default=250_000.0)
     parser.add_argument("--tier", type=int, default=None)
     parser.add_argument("--name", default="asset")
@@ -417,6 +470,23 @@ def main(argv=None) -> int:
 
     if args.action == "ladder":
         print(_ladder(args.value, threats))
+        return 0
+
+    if args.action == "axes":
+        if args.json:
+            asset = _asset(args.value, name="customer audit trail")
+            bare = envdesign.Environment(asset, [], maturity=2, opportunity_return=2_000)
+            environment, verdicts = envdesign.admit(bare, ["data_minimisation", "rotation_window", "sealed_capture"])
+            payload = {
+                threat.name: {
+                    "report": constraints.profile(environment, threat),
+                    "coverage": constraints.coverage(environment),
+                }
+                for threat in DEFAULT_THREATS
+            }
+            print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+            return 0
+        print(_axes(args.value))
         return 0
 
     if args.action == "design":

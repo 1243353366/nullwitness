@@ -4,7 +4,7 @@ One entry point for everything in this repository. Generated from the tree by
 `tools/build_index.py`, and checked by a test, so a stale link fails the suite instead
 of rotting quietly.
 
-**19 documents · 56 Python modules · 302 test cases · 6 other source files · 18,457 lines.**
+**20 documents · 57 Python modules · 322 test cases · 6 other source files · 19,062 lines.**
 
 ## Start here
 
@@ -77,6 +77,7 @@ of rotting quietly.
 
 - [`lab/.env.example`](lab/.env.example): file
 - [`lab/ARCHITECTURE.md`](lab/ARCHITECTURE.md): Layer by layer: ingestion, storage, features, model, monitoring, integrity.
+- [`lab/CONSTRAINT-AXES.md`](lab/CONSTRAINT-AXES.md): structure under it: every lever presses on exactly one of four constraints, and the four have
 - [`lab/COUNTER-ANTI-FORENSICS.md`](lab/COUNTER-ANTI-FORENSICS.md): The base monitor in `lab/integrity/` catches an attacker who deletes, truncates, or edits
 - [`lab/DEFENSE-ECONOMICS.md`](lab/DEFENSE-ECONOMICS.md): Four principles, each with a module that computes it rather than asserting it:
 - [`lab/DESIGN-NOTES.md`](lab/DESIGN-NOTES.md): Design reasoning, including the rejected approaches.
@@ -122,6 +123,7 @@ of rotting quietly.
 - [`lab/economics/__init__.py`](lab/economics/__init__.py): Defense economics: cost, resilience, adaptation, and proportionality with numbers.
 - [`lab/economics/adaptation.py`](lab/economics/adaptation.py): Adaptation: each finding becomes a change that costs the attacker more next time.
 - [`lab/economics/cli.py`](lab/economics/cli.py): Command line for the economics layer.
+- [`lab/economics/constraints.py`](lab/economics/constraints.py): Four axes: what the adversary is actually being denied.
 - [`lab/economics/discipline.py`](lab/economics/discipline.py): Win and loss discipline: bank the win, bill the loss.
 - [`lab/economics/environment.py`](lab/economics/environment.py): Incentive design: change the conditions, not the decision.
 - [`lab/economics/fingerprint.py`](lab/economics/fingerprint.py): Profiling the attacker in proportion to what they are getting out of you.

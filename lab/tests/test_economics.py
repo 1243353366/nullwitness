@@ -12,9 +12,10 @@ nothing, and tightening never loosens anything.
 
 from __future__ import annotations
 
+import itertools
 import unittest
 
-from lab.economics import adaptation, discipline, environment as envdesign, fingerprint, resilience, tiers, timing
+from lab.economics import adaptation, constraints, discipline, environment as envdesign, fingerprint, resilience, tiers, timing
 from lab.economics.model import Asset, Control, Plan, Threat
 
 SMALL = Asset("test asset", 10_000.0, tier=1)
@@ -731,6 +732,154 @@ class EnvironmentTests(unittest.TestCase):
     def test_unknown_lever_is_an_error(self):
         with self.assertRaises(KeyError):
             envdesign.admit(self.bare, ["turn_them_into_a_frog"])
+
+
+class AxisTests(unittest.TestCase):
+    """Four constraints, three of which are not fully yours to move."""
+
+    def setUp(self):
+        self.asset = Asset("audit", 250_000.0, tier=2)
+        self.threat = next(t for t in tiers.DEFAULT_THREATS if t.name == "plaintext_manipulation")
+        self.substitution = next(t for t in tiers.DEFAULT_THREATS if t.name == "ciphertext_substitution")
+        self.bare = envdesign.Environment(self.asset, [], maturity=2, opportunity_return=2_000)
+        self.base = ["data_minimisation", "rotation_window", "sealed_capture"]
+
+    def design(self, names):
+        return envdesign.admit(self.bare, names)[0]
+
+    def test_the_four_axes_are_defined_and_owned(self):
+        self.assertEqual(set(constraints.AXIS_DEFS), set(envdesign.AXES))
+        self.assertEqual(len(envdesign.AXES), 4)
+        for axis in constraints.AXIS_DEFS.values():
+            self.assertIn(axis.owner, ("you", "shared", "others"))
+
+    def test_every_catalogue_lever_sits_on_an_axis(self):
+        for lever in envdesign.LEVERS.values():
+            self.assertIn(lever.axis, envdesign.AXES, lever.name)
+
+    def test_profile_reports_all_four_axes(self):
+        report = constraints.profile(self.design(self.base), self.threat)
+        self.assertEqual([row["axis"] for row in report["axes"]], list(envdesign.AXES))
+        for row in report["axes"]:
+            for key in ("marginal", "share", "confidence", "cost", "levers", "owner", "evidence"):
+                self.assertIn(key, row)
+
+    def test_marginals_are_what_removing_an_axis_gives_back(self):
+        environment = self.design(self.base)
+        report = constraints.profile(environment, self.threat)
+        for row in report["axes"]:
+            without = [lever for lever in environment.levers if lever.axis != row["axis"]]
+            rebuilt = envdesign.Environment(self.asset, without, maturity=2, opportunity_return=2_000)
+            self.assertAlmostEqual(
+                row["marginal"],
+                round(rebuilt.attacker_return(self.threat) - environment.attacker_return(self.threat), 2),
+            )
+
+    def test_axes_compound_so_marginals_do_not_sum_to_the_total(self):
+        """If they summed, the model would be additive and complementarity would not exist."""
+        report = constraints.profile(self.design(self.base), self.threat)
+        self.assertLess(sum(row["marginal"] for row in report["axes"]), report["moved"])
+
+    def test_binding_axis_is_the_smallest_marginal(self):
+        report = constraints.profile(self.design(self.base), self.threat)
+        smallest = min(report["axes"], key=lambda row: row["marginal"])
+        self.assertEqual(report["binding"], smallest["axis"])
+        self.assertEqual(report["decisive"], max(report["axes"], key=lambda row: row["marginal"])["axis"])
+
+    def test_an_unclaimed_axis_owned_by_others_is_named(self):
+        report = constraints.profile(self.design(self.base), self.threat)
+        self.assertIn("legitimacy", report["ownership_gaps"])
+
+    def test_the_ownership_verdict_only_fires_while_the_decision_is_open(self):
+        open_design = constraints.profile(self.design(["baseline_hardening"]), self.threat)
+        self.assertEqual(open_design["decision"]["decision"], "attractive")
+        self.assertIn("axis_owned_by_others", {verdict.code for verdict in open_design["verdicts"]})
+
+    def test_a_deterred_design_does_not_nag_about_the_axis_it_does_not_own(self):
+        report = constraints.profile(self.design(self.base), self.threat)
+        self.assertEqual(report["decision"]["decision"], "deterred")
+        codes = {verdict.code for verdict in report["verdicts"]}
+        self.assertNotIn("axis_binding", codes)
+        self.assertNotIn("axis_owned_by_others", codes)
+
+    def test_perception_without_capability_is_flagged(self):
+        report = constraints.profile(self.design(["sealed_capture", "offhost_anchor"]), self.threat)
+        self.assertIn("perception_unsupported", {verdict.code for verdict in report["verdicts"]})
+
+    def test_an_undeterred_design_names_its_binding_axis(self):
+        report = constraints.profile(self.design(["baseline_hardening"]), self.threat)
+        self.assertEqual(report["decision"]["decision"], "attractive")
+        self.assertIn("axis_binding", {verdict.code for verdict in report["verdicts"]})
+
+    def test_dependency_is_flagged_when_nothing_denies_their_hold(self):
+        report = constraints.profile(self.design(["data_minimisation", "sealed_capture"]), self.threat)
+        self.assertIn("dependency_unaddressed", {verdict.code for verdict in report["verdicts"]})
+
+    def test_a_lever_aimed_at_the_wrong_threat_class_is_caught(self):
+        report = constraints.profile(self.design(self.base + ["offline_restore"]), self.threat)
+        self.assertIn("lever_wrong_threat_class", {verdict.code for verdict in report["verdicts"]})
+
+    def test_the_same_design_scores_differently_per_threat(self):
+        """Axes are threat-specific: a design tuned for manipulation is weak against substitution."""
+        environment = self.design(self.base)
+        manipulation = constraints.profile(environment, self.threat)
+        substituted = constraints.profile(environment, self.substitution)
+        self.assertEqual(manipulation["decision"]["decision"], "deterred")
+        self.assertEqual(substituted["decision"]["decision"], "attractive")
+        self.assertNotEqual(manipulation["moved"], substituted["moved"])
+
+    def test_offline_restore_applies_to_restorable_threats_only(self):
+        lever = envdesign.LEVERS["offline_restore"]
+        self.assertFalse(lever.applies(self.threat))
+        self.assertTrue(lever.applies(self.substitution))
+
+    def test_coverage_names_what_is_touched_and_what_it_costs(self):
+        report = constraints.coverage(self.design(self.base))
+        self.assertTrue(report["touched"]["capability"])
+        self.assertFalse(report["touched"]["legitimacy"])
+        self.assertAlmostEqual(sum(report["share_of_spend"].values()), 1.0)
+        self.assertFalse(report["concentrated"])
+
+    def test_coverage_flags_a_single_axis_design(self):
+        report = constraints.coverage(self.design(["sealed_capture", "offhost_anchor", "decoy_fields"]))
+        self.assertTrue(report["concentrated"])
+
+    def test_deterrence_resting_on_inference_is_labelled(self):
+        environment = envdesign.Environment(self.asset, [], maturity=2, opportunity_return=28_000)
+        perception = envdesign.admit(environment, ["sealed_capture", "offhost_anchor", "decoy_fields", "precision_profiling"])[0]
+        report = constraints.profile(perception, self.threat)
+        if report["decision"]["decision"] == "deterred":
+            self.assertIn("deterrence_not_demonstrable", {verdict.code for verdict in report["verdicts"]})
+
+
+class SaturationTests(unittest.TestCase):
+    """Adding a lever must never make the defense worse. That property is not obvious in code."""
+
+    def test_adding_a_lever_never_raises_the_attacker_return(self):
+        bare = envdesign.Environment(Asset("audit", 250_000.0, tier=2), [], maturity=2, opportunity_return=2_000)
+        names = [name for name in envdesign.LEVERS if name not in ("nudge_users_to_accept_risk", "pressure_insider_by_design")]
+        for threat in tiers.DEFAULT_THREATS:
+            for size in range(0, 3):
+                for combination in itertools.combinations(names, size):
+                    start = envdesign.admit(bare, list(combination))[0]
+                    before = start.attacker_return(threat)
+                    for extra in names:
+                        if extra in combination:
+                            continue
+                        grown = envdesign.admit(start, [extra])[0]
+                        self.assertLessEqual(
+                            grown.attacker_return(threat),
+                            before + 1e-9,
+                            f"{threat.name}: adding {extra} to {combination} raised their return",
+                        )
+
+    def test_a_weaker_loot_lever_cannot_displace_a_stronger_one(self):
+        """The bug this replaced: ordering by cost let a cheap lever push a strong one into decay."""
+        bare = envdesign.Environment(Asset("audit", 250_000.0, tier=2), [], maturity=2, opportunity_return=2_000)
+        one = envdesign.admit(bare, ["data_minimisation"])[0]
+        two = envdesign.admit(one, ["offline_restore"])[0]
+        threat = next(t for t in tiers.DEFAULT_THREATS if t.name == "ciphertext_substitution")
+        self.assertLessEqual(two.terms(threat)["loot"], one.terms(threat)["loot"])
 
 
 class ProportionalityTests(unittest.TestCase):

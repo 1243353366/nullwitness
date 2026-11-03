@@ -120,6 +120,8 @@ lab/
   RESPONSE-TIMING.md        CISA's containment considerations, made executable
   economics/environment.py  incentive design: the conditions, not the decision
   INCENTIVE-DESIGN.md       levers, substitution, and where deterrence ends and manipulation starts
+  economics/constraints.py  capability, legitimacy, perception, dependency: who owns each axis
+  CONSTRAINT-AXES.md        the four, priced by margin, and why they do not add up
   tests/                    68 unittest cases, no pytest needed
   ingest/                   C++ bounded queue, Makefile, self-test
   schema/                   TimescaleDB schema, RLS, rollup view

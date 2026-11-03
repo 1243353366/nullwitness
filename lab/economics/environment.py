@@ -65,6 +65,10 @@ SUBJECTS = ("adversary", "user", "third_party")
 
 MECHANISMS = ("loot", "latency", "visibility", "cost", "consequence")
 
+# Which constraint a lever actually presses on. See lab/CONSTRAINT-AXES.md: the mechanisms
+# describe the arithmetic, the axes describe what the adversary is being denied.
+AXES = ("capability", "legitimacy", "perception", "dependency")
+
 # Within one mechanism, extra levers saturate: the second visibility lever is worth less than the
 # first, because the first already made the same thing visible. The exponent below is how fast
 # the marginal lever decays.
@@ -77,17 +81,21 @@ class Lever:
 
     name: str
     mechanism: str
+    axis: str = "capability"
     setup_mult: float = 1.0
     maintenance_mult: float = 1.0
     loot_mult: float = 1.0
     annual_cost: float = 0.0
     subject: str = "adversary"
+    applies_to: Tuple[str, ...] = ()  # empty means every threat
     min_maturity: int = 0
     note: str = ""
 
     def __post_init__(self) -> None:
         if self.mechanism not in MECHANISMS:
             raise ValueError(f"{self.name}: unknown mechanism {self.mechanism!r}")
+        if self.axis not in AXES:
+            raise ValueError(f"{self.name}: unknown axis {self.axis!r}")
         if self.subject not in SUBJECTS:
             raise ValueError(f"{self.name}: unknown subject {self.subject!r}")
         if self.setup_mult < 1.0 or self.maintenance_mult < 1.0:
@@ -95,11 +103,16 @@ class Lever:
         if not 0.0 < self.loot_mult <= 1.0:
             raise ValueError(f"{self.name}: loot_mult must be a fraction in (0, 1]")
 
+    def applies(self, threat: Threat) -> bool:
+        """A lever aimed at the wrong threat class is spend, not design."""
+        return not self.applies_to or threat.name in self.applies_to
+
 
 LEVERS: Dict[str, Lever] = {
     "data_minimisation": Lever(
         "data_minimisation",
         "loot",
+        axis="capability",
         loot_mult=0.40,
         annual_cost=800,
         note="they cannot take what is not stored, which is the only leverage that survives a competent attacker",
@@ -107,6 +120,7 @@ LEVERS: Dict[str, Lever] = {
     "rotation_window": Lever(
         "rotation_window",
         "latency",
+        axis="dependency",
         loot_mult=0.60,
         maintenance_mult=2.0,
         annual_cost=900,
@@ -115,6 +129,7 @@ LEVERS: Dict[str, Lever] = {
     "sealed_capture": Lever(
         "sealed_capture",
         "visibility",
+        axis="perception",
         maintenance_mult=2.0,
         annual_cost=1_200,
         note="a record that proves it was edited turns a quiet edit into a loud one",
@@ -122,6 +137,7 @@ LEVERS: Dict[str, Lever] = {
     "offhost_anchor": Lever(
         "offhost_anchor",
         "visibility",
+        axis="perception",
         maintenance_mult=2.5,
         annual_cost=1_500,
         note="keeping consistent with something they cannot reach is recurring work",
@@ -129,6 +145,7 @@ LEVERS: Dict[str, Lever] = {
     "decoy_fields": Lever(
         "decoy_fields",
         "visibility",
+        axis="perception",
         maintenance_mult=1.6,
         annual_cost=700,
         note="doubt is a tax: every field they cannot vouch for has to be checked twice",
@@ -136,6 +153,7 @@ LEVERS: Dict[str, Lever] = {
     "baseline_hardening": Lever(
         "baseline_hardening",
         "cost",
+        axis="capability",
         setup_mult=1.8,
         annual_cost=3_000,
         note="raises the price of the first foothold, once, which is the weakest of the six",
@@ -143,16 +161,36 @@ LEVERS: Dict[str, Lever] = {
     "precision_profiling": Lever(
         "precision_profiling",
         "consequence",
+        axis="perception",
         setup_mult=1.3,
         maintenance_mult=1.3,
         annual_cost=6_000,
         min_maturity=2,
         note="credible characterisation raises the expected cost of being remembered; incredible profiling raises nothing",
     ),
+    "offline_restore": Lever(
+        "offline_restore",
+        "loot",
+        axis="dependency",
+        loot_mult=0.85,
+        annual_cost=1_100,
+        applies_to=("ciphertext_substitution", "ledger_rollback"),
+        note="removes the dependency they were counting on: a hold over data you can restore is not a hold. It does not help against an edit you cannot detect, which is the whole reason the integrity layer comes first",
+    ),
+    "legitimacy_file": Lever(
+        "legitimacy_file",
+        "consequence",
+        axis="legitimacy",
+        setup_mult=1.0,
+        maintenance_mult=1.05,
+        annual_cost=400,
+        note="the paperwork that lets someone else act: a documented, reported, standards-aligned incident is one a regulator or peer network can respond to",
+    ),
     # Kept in the catalogue to demonstrate the gate, and refused by `permissible`.
     "nudge_users_to_accept_risk": Lever(
         "nudge_users_to_accept_risk",
         "loot",
+        axis="dependency",
         loot_mult=1.0,
         annual_cost=0,
         subject="user",
@@ -161,6 +199,7 @@ LEVERS: Dict[str, Lever] = {
     "pressure_insider_by_design": Lever(
         "pressure_insider_by_design",
         "consequence",
+        axis="dependency",
         subject="user",
         note="shapes a colleague's environment so that reporting feels costlier than staying quiet",
     ),
@@ -180,28 +219,38 @@ class Environment:
     def annual_cost(self) -> float:
         return sum(lever.annual_cost for lever in self.levers)
 
-    def _saturated(self, mechanism: str) -> Tuple[float, float, float]:
+    def active(self, threat: Optional[Threat] = None) -> List[Lever]:
+        return [lever for lever in self.levers if threat is None or lever.applies(threat)]
+
+    def _saturated(self, mechanism: str, threat: Optional[Threat] = None) -> Tuple[float, float, float]:
         """Combine the levers in one mechanism, with the marginal one worth less."""
-        selected = [lever for lever in self.levers if lever.mechanism == mechanism]
+        selected = [lever for lever in self.active(threat) if lever.mechanism == mechanism]
         setup = maintenance = loot = 1.0
-        for index, lever in enumerate(sorted(selected, key=lambda item: item.annual_cost, reverse=True)):
+
+        def strength(lever: Lever) -> float:
+            return (lever.setup_mult - 1.0) + (lever.maintenance_mult - 1.0) + (1.0 - lever.loot_mult)
+
+        # Strongest lever first, so the decay lands on the weakest one. Ordering by cost instead
+        # let a cheap lever push an expensive, stronger one into the decayed slot, which made
+        # stacking worse than not stacking: the one behaviour this model must never produce.
+        for index, lever in enumerate(sorted(selected, key=strength, reverse=True)):
             weight = (1.0 - SATURATION) ** index
             setup *= 1.0 + (lever.setup_mult - 1.0) * weight
             maintenance *= 1.0 + (lever.maintenance_mult - 1.0) * weight
             loot *= 1.0 - (1.0 - lever.loot_mult) * weight
         return setup, maintenance, loot
 
-    def terms(self) -> Dict[str, float]:
+    def terms(self, threat: Optional[Threat] = None) -> Dict[str, float]:
         setup = maintenance = loot = 1.0
         for mechanism in MECHANISMS:
-            part = self._saturated(mechanism)
+            part = self._saturated(mechanism, threat)
             setup *= part[0]
             maintenance *= part[1]
             loot *= part[2]
         return {"setup": round(setup, 4), "maintenance": round(maintenance, 4), "loot": round(loot, 4)}
 
     def attacker_return(self, threat: Threat, months: int = 12) -> float:
-        terms = self.terms()
+        terms = self.terms(threat)
         loot = threat.loot(self.asset.value) * terms["loot"]
         return loot - threat.setup_cost * terms["setup"] - threat.monthly_maintenance * terms["maintenance"] * months
 
