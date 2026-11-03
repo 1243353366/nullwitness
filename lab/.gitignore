@@ -1,0 +1,6 @@
+# Runtime artifacts, not source.
+reports/
+__pycache__/
+*.pyc
+.env
+collector_selftest

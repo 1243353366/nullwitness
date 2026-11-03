@@ -1,0 +1,143 @@
+# lab: experimental branch
+
+The `experimental` branch turns the research dump in
+[`source/nerdshit.md`](source/nerdshit.md) into something that runs, fails loudly, and
+can be audited. It is built on top of `main`, which stays a static, non-executing
+educational repo. Nothing here changes `main`.
+
+**Status: experimental.** One layer is a real, tested implementation with honest
+gaps. Several parts of the source are deliberately not implemented, and the reasons
+are written down rather than implied.
+
+## What this is
+
+A behavioral analytics pipeline for telemetry on assets the operator controls: your
+own web surface, your own published canaries, your own feeds. It answers "does this
+traffic look scripted", per client, per window, with validation that does not leak the
+future into the past and monitoring that can be provoked into firing.
+
+It is not an attribution system and does not try to identify a person. That was a
+decision, not a limitation: see [ETHICS-AND-LIMITS.md](ETHICS-AND-LIMITS.md).
+
+## Status by component
+
+| Area | File | State |
+| --- | --- | --- |
+| Event contract | `features/contract.py` | tested |
+| Synthetic data | `data/synthetic.py` | tested, deliberately overlapping |
+| Feature engineering | `features/pipeline.py` | tested, regression-covered |
+| Temporal validation | `model/temporal_cv.py` | tested, leakage assertion |
+| Logistic baseline | `model/logistic.py` | tested |
+| Reflexive belief update | `model/belief.py` | tested, convergence-checked |
+| Monitoring (PSI, z-gate, shadow) | `model/monitor.py` | tested, poisoning probe |
+| Privacy primitives | `privacy/dp.py` | tested, sequential composition only |
+| Orchestration | `orchestrator/run_pipeline.py` | tested end to end |
+| Canary tokens | `canary/tokens.py` | tested |
+| Canary tamper detection | `canary/manifest.py` | tested |
+| Canary callback listener | `canary/listener.py` | tested, live request in the suite |
+| Java bridge to `main` | `../bridge/` | compiled with `-Werror`, self-tested |
+| Ingestion queue (C++) | `ingest/collector.hpp` | compiled and self-tested with g++ |
+| Schema (SQL) | `schema/001_schema.sql` | **unverified**, no PostgreSQL in the lab sandbox |
+| Enrichment (R) | `enrich/enrich.R` | **unverified**, no R in the lab sandbox |
+| Container run | `docker-compose.yml` | **unverified**, no Docker in the lab sandbox |
+| ONNX / INT8 edge inference | n/a | not implemented |
+| Cross-network attribution | n/a | excluded, see ethics page |
+| Active probing | n/a | excluded, see ethics page |
+
+The three unverified files are unverified for an environmental reason, not a design
+one. They are written to be reviewed and run on a host that has the services.
+
+## Quickstart
+
+```bash
+# runs the whole pipeline on synthetic data and prints a report
+python3 -m lab.orchestrator.run_pipeline --write-report
+
+# 30 tests, including regression tests for each bug fixed during the port
+python3 -m unittest discover -s lab/tests -t . -v
+
+# C++ ingestion self-test: saturates a bounded queue, aborts on deadlock
+make -C lab/ingest check
+
+# Java bridge: scope check against main's scenarios, event fixtures, doc summary
+make -C bridge check
+make -C bridge run
+
+# canary callback listener, with a token you can place in a document you own
+python3 -m lab.canary.listener --jsonl lab/reports/canary_events.jsonl \
+    --label vendor-export-2026-11 --port 8080
+```
+
+Example output from a clean run:
+
+```
+events=1800 clients=30 span_h=22.56
+feature rows=30
+expanding temporal CV: mean_auc=0.963 folds=[0.8889, 1.0, 1.0]
+  rolling temporal CV: mean_auc=0.963 folds=[0.8889, 1.0, 1.0]
+holdout auc=1.0 stability_psi=0.0051 holdout_psi=0.4811
+shadow mean_divergence=0.0018 flagged=0/9
+poisoning probe: clean=0.0018 noisy=0.1863 reacted=True
+reflexive: naive=[0.0514, 0.8986, 0.0499] -> posterior=[0.2712, 0.4656, 0.2632] iters=2 converged=True
+top features: channel_diversity=-1.1117, datacenter_share=1.0795, fp_stability=1.007, ...
+```
+
+Read those numbers carefully. They describe synthetic populations with a known answer
+and a deliberate 30% overlap. They are a plumbing check, not a performance claim. The
+base-rate arithmetic in [DESIGN-NOTES.md](DESIGN-NOTES.md) is the number that matters
+before anyone deploys this.
+
+## Layout
+
+```
+lab/
+  source/nerdshit.md        the original document, converted and untouched
+  README.md                 this file
+  ARCHITECTURE.md           layers, event contract, how to run
+  DESIGN-NOTES.md           what is established, heuristic, or guess
+  WEAKNESSES-AND-FIXES.md   every bug in the source and the test that covers it
+  ETHICS-AND-LIMITS.md      what was not built and why
+  features/                 event contract, feature engineering
+  data/                     synthetic generators
+  model/                    logistic baseline, temporal CV, belief update, monitors
+  privacy/                  differential privacy primitives, suppression
+  orchestrator/             deterministic end-to-end run
+  canary/                   token issuance, tamper detection, callback listener
+  tests/                    43 unittest cases, no pytest needed
+  ingest/                   C++ bounded queue, Makefile, self-test
+  schema/                   TimescaleDB schema, RLS, rollup view
+  enrich/                   R enrichment with parameterized queries
+  docker-compose.yml        TimescaleDB plus a pipeline runner
+  ../bridge/                Java bridge: main's scenarios -> lab events -> docs summary
+```
+
+## The canary half
+
+`lab/canary/` is the detection side of the canary idea, which is the half that holds
+up: mint a token, put it somewhere you control, log the callback, and treat a missing
+or edited canary file as an alert rather than as background noise.
+
+- `tokens.py` issues deterministic token ids from `(label, salt epoch)` so rotation is
+  an epoch change, and verifies that a callback carries a token you actually issued.
+- `listener.py` is a stdlib HTTP listener. It hashes the connecting address with the
+  salt epoch and writes one contract event per callback. It stores no address, sets no
+  cookie, serves no script, and sends no body.
+- `manifest.py` snapshots digests and reports missing, modified, and added files. Its
+  findings become events attributed to your own host, so tamper signal and access
+  signal land in one stream.
+
+What is not here: decoy documents, tracking pixels, or anything that makes a request
+happen without the visitor acting. A token is a string; where it goes and what notice
+accompanies it is the operator's call and the operator's obligation.
+
+## Relationship to `main`
+
+`main` is the static educational sandbox: prose about defensive data handling and the
+legal boundaries of data deception. This branch is the part where the ideas are
+turned into code, which is exactly what that repo's own safety page says it does not
+do. So the branch keeps the same boundaries in a different form: the lab is scoped to
+assets you control, it stores no addresses, and it refuses the parts of the source
+that would point at people.
+
+If the experiment stops being useful, deleting the branch deletes the lab. `main` is
+unaffected either way.

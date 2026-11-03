@@ -1,0 +1,4 @@
+# The Python layers run on the standard library plus numpy.
+# There is no torch dependency: the modeling layer is a numpy logistic regression,
+# and an optional torch upgrade is documented rather than shipped.
+numpy>=1.26,<3

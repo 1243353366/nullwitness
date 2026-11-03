@@ -1,0 +1,54 @@
+# lab/docker-compose.yml
+#
+# Two services: a TimescaleDB instance with the schema applied, and a one-shot
+# pipeline runner. Credentials come from lab/.env, which is gitignored.
+#
+#   cp lab/.env.example lab/.env
+#   docker compose -f lab/docker-compose.yml up --build
+#
+# Status: unverified. The lab sandbox has no Docker daemon, so this file has been
+# reviewed for syntax and intent but never started. Expect to adjust the image tag or
+# the init ordering on a real host.
+
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-lab}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    ports:
+      - "${PGPORT:-5432}:5432"
+    volumes:
+      - timescale-data:/var/lib/postgresql/data
+      - ./schema:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  pipeline:
+    image: python:3.12-slim
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    working_dir: /repo
+    volumes:
+      - ..:/repo:ro
+      - ./reports:/repo/lab/reports
+    environment:
+      PGHOST: timescaledb
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-lab}
+      PGUSER: ${PGUSER:-lab_analysis}
+      PGPASSWORD: ${PGPASSWORD:?PGPASSWORD is required}
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    command: >
+      sh -c "pip install --quiet --no-cache-dir -r lab/requirements.txt &&
+             python3 -m lab.orchestrator.run_pipeline --write-report"
+    restart: "no"
+
+volumes:
+  timescale-data:

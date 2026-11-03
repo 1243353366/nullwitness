@@ -3,7 +3,7 @@
 A static, non-executing educational sandbox for discussing defensive data handling,
 canary records, and the legal and ethical boundaries of data deception.
 
-## What is actually in this repository
+## What is in this repository on `main`
 
 | Path | What it is |
 | --- | --- |
@@ -16,9 +16,12 @@ canary records, and the legal and ethical boundaries of data deception.
 | [`archive/canary-check/`](archive/canary-check/) | Two historical, unmaintained code dumps. Not part of the lesson, not built, not working as stored. |
 | [`LICENSE`](LICENSE) | CC0 1.0 Universal (public domain dedication) for the written material. |
 
-## The educational material is static
+`lab/` and `bridge/` do not exist on `main`. They live on the `experimental` branch and
+are described at the end of this file.
 
-Everything outside `archive/` is prose and one JSON file:
+## The educational material is static on `main`
+
+Everything outside `archive/` on this branch is prose and one JSON file:
 
 - no build step, package manifest, dependencies, or test suite
 - no service, container, or deployment configuration
@@ -32,6 +35,10 @@ is reserved for documentation and resolves nowhere.
 
 The word "simulation" here means reading and discussing a fictional scenario. It does
 not mean running a technical simulator.
+
+The `experimental` branch breaks all five of those properties on purpose. That branch
+is an engineering experiment with a build step, dependencies, tests, and containers;
+this one is the written argument. Keep them separate and neither has to pretend.
 
 ## The one caveat: the archive
 
@@ -48,6 +55,33 @@ Both look for a file named `attacker.txt` in the home directory and delete it, w
 is detection evasion rather than defensive work, so neither is maintained, documented
 as runnable, or connected to anything here. See [`archive/README.md`](archive/README.md)
 for the reasoning. Treat them as historical artifacts, not as examples to follow.
+
+## Experimental lab (separate branch)
+
+The [`experimental` branch](https://github.com/1243353366/data-deception-legal-sandbox/tree/experimental) carries an executable lab built on top of this
+repository. `main` stays documentation only, exactly as described above: the prose here
+states boundaries, and the lab is where those boundaries are enforced in code.
+
+| Piece | Where | What it is |
+| --- | --- | --- |
+| Pipeline | [`lab/`](https://github.com/1243353366/data-deception-legal-sandbox/tree/experimental/lab) | Behavioral analytics on telemetry from assets the operator controls: bounded C++ ingestion with backpressure, a TimescaleDB schema with retention and row-level security, per-client features, rolling temporal validation, drift monitoring, differential privacy primitives. Stores no addresses. |
+| Canaries | [`lab/canary/`](https://github.com/1243353366/data-deception-legal-sandbox/tree/experimental/lab/canary) | Token issuance, a stdlib callback listener, and tamper detection that treats a missing or edited canary as the alert. |
+| Bridge | [`bridge/`](https://github.com/1243353366/data-deception-legal-sandbox/tree/experimental/bridge) | Dependency-free Java. Reads [`examples/scenarios.json`](examples/scenarios.json), fails if a scenario claims an out-of-scope capability as authorized, emits events the lab consumes, and writes the lab's latest run back out as Markdown. |
+| Scope | [`lab/ETHICS-AND-LIMITS.md`](https://github.com/1243353366/data-deception-legal-sandbox/blob/experimental/lab/ETHICS-AND-LIMITS.md) | What the lab refuses to build, and why: cross-network identity attribution, active probing, bait documents, reflexive manipulation of a person. |
+
+```bash
+git checkout experimental
+
+python3 -m lab.orchestrator.run_pipeline --write-report   # pipeline, synthetic data
+python3 -m unittest discover -s lab/tests -t .            # 43 tests
+make -C lab/ingest check                                  # C++ ingestion self-test
+make -C bridge check                                      # Java bridge self-test
+```
+
+The lab's numbers come from synthetic data with a known answer. They check that the
+plumbing works, not that the model predicts anything, and
+[`lab/DESIGN-NOTES.md`](https://github.com/1243353366/data-deception-legal-sandbox/blob/experimental/lab/DESIGN-NOTES.md) does the base-rate arithmetic that
+explains why.
 
 ## Topics
 
