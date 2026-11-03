@@ -18,6 +18,34 @@ Five properties, in the order they bind:
 5  ✓ untampered plaintext at source ├─ about whether the record means anything
 ```
 
+## Asymmetric competition
+
+This is competition you are not trying to win by defeating anyone. You are trying to make
+exploiting you a bad trade. Four moves, and each one has an engineering form here:
+
+| Move | What it means | Where it lives |
+| --- | --- | --- |
+| raise their cost | every layer they must defeat before a record is credible | envelope, seal, ledger, attested boot |
+| lower their return | the more work they do, the more evidence they leave | cascade demotion, precision findings, attribution in `flow.py` |
+| preserve your resources | your controls are cheap to run and cheap to keep | stdlib-only paths, one master key, no always-on third party |
+| adapt faster | changing a decoy list or a policy is a config edit, not a rebuild | decoy rotation, boot policy, `generation` on the key ring |
+
+The move that gets skipped is the third. A control that costs you more than it costs them is
+a net loss even when it works: decoys you cannot be bothered to rotate, a policy nobody
+updates, a rotation cadence that breaks your own pipeline. The asymmetry only holds while your
+marginal cost stays lower than theirs, which is a budget question, not a cryptographic one.
+
+The fourth move is where the time asymmetry lives, and it is the real advantage. Every control
+in this repository is something they have to discover and work around; you already know what it
+is. That advantage decays as they learn, so the design goal is not a wall, it is a wall they
+have to keep re-climbing. `lab/COUNTER-ANTI-FORENSICS.md` is the section that assumes they
+already have a map.
+
+What this strategy does not do is produce a verdict. It produces a stream of findings whose
+value is that each one costs the attacker something to explain away. A defender who reads that
+as "we are secure now" has converted a position into a claim, and the claim is the part that
+breaks.
+
 ## Why this order, and not a list
 
 Properties 1 to 3 protect a record. Properties 4 and 5 decide whether the record is worth
@@ -72,21 +100,57 @@ reads it from a variable and who is right that it is convenient. It is still a f
 shared host, `ps` and core dumps are part of the threat model, and the honest fix is a key
 file with 0600 or a KMS, not a smaller threat model.
 
-### About the AEAD construction
+### The cipher: AES-256-GCM
 
-The sandbox has no `cryptography` package, so the envelope is built from the standard
-library: HMAC-SHA256 in counter mode for the keystream, HMAC-SHA256 over header and ciphertext
-for the tag, encrypt-then-MAC, separate subkeys.
+The envelope is AES-256-GCM. A 96-bit nonce is required rather than supported: the general J0
+derivation for other nonce lengths is where implementations diverge, and there is no reason to
+accept that risk when 96 bits is enough.
 
-**Do not use this to protect anything real.** It has no hardware acceleration, no
-nonce-misuse resistance, no constant-time guarantees in Python, and nonce reuse under one key
-is as fatal as it is for any counter-mode cipher. It is here because the boundary checks are
-the interesting part and they are library-agnostic: replace `_keystream` and `_tag` with
-AES-GCM or ChaCha20-Poly1305 and every check in the suite still applies. That is the one
-change to make before this protects a real record, and the file says so at the top.
+Two implementations produce byte-identical envelopes, so a record written on one host opens on
+the other:
 
-HKDF is checked against RFC 5869's own test vectors, because a self-consistent derivation bug
-produces a system that works perfectly and is wrong.
+- **`cryptography`'s AESGCM** when the package is installed. Constant-time, hardware
+  accelerated. This is the path that should carry real data.
+- **`lab/crypto/aesgcm.py`**, pure Python, checked against GCM specification test cases 13 to
+  16 and cross-checked against the library on random keys, nonces, lengths, and AAD.
+
+The pure-Python path is a portability fallback with an honest caveat, and the caveat is not
+decoration: its S-box is a table, its GHASH is a bit-at-a-time loop, and neither has a
+constant-time story. On a host where an attacker can measure timing, that implementation is a
+side channel with a cipher attached. Install the package before protecting anything that
+matters. The tests say which path ran.
+
+The first version of this layer used an HMAC-based construction, and envelopes written with it
+(`backend 0x01`) still open. A format change that strands old records is not a format change,
+it is data loss. New records are GCM (`backend 0x02`).
+
+HKDF for the key hierarchy is checked against RFC 5869's own vectors, because a self-consistent
+derivation bug produces a system that works perfectly and is wrong.
+
+### Hash it: the digest chain
+
+Ciphertext authentication needs the key. Some of the checks you actually want need no key at
+all, and the difference is worth a module: `lab/crypto/archive.py` hashes each envelope at
+write time and puts the digest in the HMAC-chained ledger from `lab/integrity/ledger.py`.
+
+That buys three things the tag cannot:
+
+- **substitution.** Same stream, same sequence, a valid envelope for different content,
+  encrypted with the right key: nothing about that ciphertext is wrong. The digest in the
+  ledger is the only layer that knows it is not the record that was written. This is also the
+  case a stolen payload key cannot cover up.
+- **removal.** The ledger records what was written, so an envelope that is gone is an entry
+  with nothing behind it. Surviving records all verify; the absence is the finding.
+- **ledger rewriting.** Each entry carries the MAC of its predecessor, so editing one breaks
+  the chain.
+
+Verification needs the ledger key, not the payload key. An archive scanner, a backup checker,
+or a colleague confirming a file has not changed can do it without decryption rights, which is
+usually the difference between a check that runs continuously and one that runs never.
+
+The limit is the ledger's existing limit, restated rather than inherited quietly: an attacker
+who holds the ledger key, the anchor, and the machine can roll both back to a consistent
+earlier state. The anchor has to leave the host.
 
 ## 4: boot and firmware integrity
 
@@ -161,11 +225,11 @@ Two further checks live here because they are plaintext problems, not cipher pro
 ## Running it
 
 ```
-python3 -m lab.crypto.cli demo           # fourteen scenarios across the five properties
+python3 -m lab.crypto.cli demo           # seventeen scenarios across the five properties
 python3 -m lab.crypto.cli demo --json
 python3 -m unittest lab.tests.test_crypto
 ```
 
-Three of the fourteen are controls: proper key custody, a clean envelope, and a policy-matched
+Four of the seventeen are controls: proper key custody, a clean envelope, and a policy-matched
 boot chain must all hold. One is a limit: a record falsified inside the endpoint before it was
 sealed passes every check here, and the demo prints that instead of hiding it.

@@ -2,3 +2,6 @@
 # There is no torch dependency: the modeling layer is a numpy logistic regression,
 # and an optional torch upgrade is documented rather than shipped.
 numpy>=1.26,<3
+# Optional: constant-time AES-256-GCM via cryptography. The trust chain runs without it using
+# the pure-Python implementation, which is correct but leaks through timing.
+cryptography>=42

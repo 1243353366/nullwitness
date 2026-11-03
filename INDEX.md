@@ -4,7 +4,7 @@ One entry point for everything in this repository. Generated from the tree by
 `tools/build_index.py`, and checked by a test, so a stale link fails the suite instead
 of rotting quietly.
 
-**15 documents · 33 Python modules · 110 test cases · 6 other source files · 11,455 lines.**
+**16 documents · 45 Python modules · 193 test cases · 6 other source files · 14,297 lines.**
 
 ## Start here
 
@@ -82,6 +82,7 @@ of rotting quietly.
 - [`lab/ETHICS-AND-LIMITS.md`](lab/ETHICS-AND-LIMITS.md): What the lab will not build and why: attribution, probing, bait documents, manipulation.
 - [`lab/INTEGRITY.md`](lab/INTEGRITY.md): Forensic-integrity monitor: channels, threat model, false positives, and the case that defeats it.
 - [`lab/README.md`](lab/README.md): Orientation for the lab: what runs, what is verified, what is not.
+- [`lab/TRUST-CHAIN.md`](lab/TRUST-CHAIN.md): Five properties, in the order they bind:
 - [`lab/WEAKNESSES-AND-FIXES.md`](lab/WEAKNESSES-AND-FIXES.md): Known weaknesses and what was done about each.
 - [`lab/__init__.py`](lab/__init__.py): Python module
 
@@ -90,6 +91,19 @@ of rotting quietly.
 - [`lab/canary/listener.py`](lab/canary/listener.py): Stdlib callback listener that hashes the source address and stores no address.
 - [`lab/canary/manifest.py`](lab/canary/manifest.py): Tamper detection where a missing or edited canary is the alert.
 - [`lab/canary/tokens.py`](lab/canary/tokens.py): Canary token issuance and encoding.
+
+**lab/crypto/**
+
+- [`lab/crypto/__init__.py`](lab/crypto/__init__.py): The trust chain: five properties, each with code that enforces or checks it.
+- [`lab/crypto/aesgcm.py`](lab/crypto/aesgcm.py): AES-256-GCM: the real cipher, and why it is here in pure Python.
+- [`lab/crypto/archive.py`](lab/crypto/archive.py): Hash the envelopes into the ledger, so substitution at rest needs no key to catch.
+- [`lab/crypto/boot.py`](lab/crypto/boot.py): Boot and firmware integrity: does the environment handling the plaintext deserve belief?
+- [`lab/crypto/cli.py`](lab/crypto/cli.py): Demo for the trust chain: five properties, one report, honest about the holes.
+- [`lab/crypto/envelope.py`](lab/crypto/envelope.py): Payload encryption and authenticated encryption: the envelope itself.
+- [`lab/crypto/flow.py`](lab/crypto/flow.py): The whole chain in one pass: capture, seal, encrypt, ship, decrypt, verify.
+- [`lab/crypto/keys.py`](lab/crypto/keys.py): Key protection: one master secret, purpose-separated subkeys, and an audit of custody.
+- [`lab/crypto/model.py`](lab/crypto/model.py): The five properties, as a shared vocabulary.
+- [`lab/crypto/seal.py`](lab/crypto/seal.py): Endpoint integrity: a source seal over the plaintext, verified at the sink.
 
 **lab/data/**
 
@@ -159,8 +173,10 @@ of rotting quietly.
 **lab/tests/**
 
 - [`lab/tests/__init__.py`](lab/tests/__init__.py): Python module
+- [`lab/tests/test_aesgcm.py`](lab/tests/test_aesgcm.py): Tests for AES-256-GCM: published vectors, differential testing, and failure modes.
 - [`lab/tests/test_canary.py`](lab/tests/test_canary.py): Tests for the canary modules: tokens, tamper detection, callback listener.
 - [`lab/tests/test_counterforensics.py`](lab/tests/test_counterforensics.py): Tests for the counter-anti-forensic layer.
+- [`lab/tests/test_crypto.py`](lab/tests/test_crypto.py): Tests for the trust chain: five properties, each with a case that holds and one that fails.
 - [`lab/tests/test_index.py`](lab/tests/test_index.py): Fails when INDEX.md has drifted from the tree.
 - [`lab/tests/test_integrity.py`](lab/tests/test_integrity.py): Integrity cases: positives, negatives, and the single-host rollback limit.
 - [`lab/tests/test_lab.py`](lab/tests/test_lab.py): Tests for the experimental lab.

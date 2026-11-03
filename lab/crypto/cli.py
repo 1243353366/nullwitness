@@ -20,7 +20,7 @@ import tempfile
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
 
-from lab.crypto import boot, envelope, keys
+from lab.crypto import archive, boot, envelope, keys
 from lab.crypto.flow import Partition, Source, audit_stream
 from lab.crypto.keys import KeyRing
 from lab.crypto.model import (
@@ -59,7 +59,7 @@ def payload_hidden() -> TrustReport:
     ring = KeyRing(MASTER)
     source, partitions = _clean_stream(ring)
     report = audit_stream(ring, STREAM, partitions, source.sealed, expected_head=source.head)
-    assert envelope.peek(partitions[0].blob).backend == "hmac-ctr-etm"
+    assert envelope.peek(partitions[0].blob).backend == "aes-256-gcm"
     return report
 
 
@@ -128,6 +128,49 @@ def custody_environment() -> TrustReport:
         return keys.audit_custody(None, MASTER)
     finally:
         del os.environ["NULLWITNESS_KEY"]
+
+
+def _archived():
+    """Store a clean stream's envelopes with their digests, in a temporary directory."""
+    holder = tempfile.TemporaryDirectory()
+    root = pathlib.Path(holder.name)
+    ring = KeyRing(MASTER)
+    source, partitions = _clean_stream(ring)
+    book = archive.Archive(root / "digests.jsonl", b"demo-ledger-key-material-32-bytes")
+    for partition in partitions:
+        book.store(partition, now=1_760_000_000.0)
+    return holder, source, partitions, book
+
+
+def archive_clean() -> TrustReport:
+    holder, _, partitions, book = _archived()
+    try:
+        return book.verify(partitions)
+    finally:
+        holder.cleanup()
+
+
+def archive_swap() -> TrustReport:
+    """Same stream, same sequence, a valid envelope for different content.
+
+    Nothing about the ciphertext is wrong: it authenticates, it is the right length, and it
+    was made with the right key. The digest in the ledger is what knows it is not the record
+    that was written.
+    """
+    holder, source, partitions, book = _archived()
+    try:
+        forged = Partition(STREAM, 1, "r1", source.emit("r99", b"2026-11-03T16:01:00Z actor=root").blob)
+        return book.verify([partitions[0], forged, partitions[2], partitions[3]])
+    finally:
+        holder.cleanup()
+
+
+def archive_gap() -> TrustReport:
+    holder, _, partitions, book = _archived()
+    try:
+        return book.verify(partitions[:3])
+    finally:
+        holder.cleanup()
 
 
 def boot_clean() -> TrustReport:
@@ -201,6 +244,9 @@ SCENARIOS: List[Scenario] = [
     Scenario(PAYLOAD, "wrapped, not encrypted", "plaintext_visible", null_cipher),
     Scenario(AUTHENTICATED, "one flipped bit", "ciphertext_tampered", bit_flip),
     Scenario(AUTHENTICATED, "authentic record relocated", "ciphertext_tampered", moved_record),
+    Scenario(AUTHENTICATED, "envelopes hashed into the ledger", "verified", archive_clean),
+    Scenario(AUTHENTICATED, "valid envelope swapped at rest", "envelope_substituted", archive_swap),
+    Scenario(AUTHENTICATED, "envelope removed from the archive", "envelope_missing", archive_gap),
     Scenario(KEY_PROTECTION, "key 0600 outside the data tree", "verified", custody_clean),
     Scenario(KEY_PROTECTION, "key inside the tree, mode 0644", "two findings", custody_loose),
     Scenario(KEY_PROTECTION, "key in the environment", "key_in_environment", custody_environment),

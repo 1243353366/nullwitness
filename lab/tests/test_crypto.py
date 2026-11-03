@@ -21,7 +21,7 @@ import pathlib
 import tempfile
 import unittest
 
-from lab.crypto import boot, envelope, keys
+from lab.crypto import archive, boot, envelope, keys
 from lab.crypto.envelope import OutOfOrder, Replay, ReplayGuard, Tampered
 from lab.crypto.flow import Partition, Sink, Source, audit_stream, combine
 from lab.crypto.keys import KeyRing, audit_custody, hkdf, write_key_file
@@ -104,9 +104,26 @@ class EnvelopeTests(unittest.TestCase):
 
     def test_peek_reveals_only_metadata(self):
         info = envelope.peek(envelope.encrypt(self.ring, b"x" * 100, AAD))
-        self.assertEqual(info.backend, "hmac-ctr-etm")
+        self.assertEqual(info.backend, "aes-256-gcm")
         self.assertEqual(info.ciphertext_length, 100)
-        self.assertEqual(info.tag_length, 32)
+        self.assertEqual(info.tag_length, 16)
+
+    def test_new_envelopes_use_aes_gcm(self):
+        blob = envelope.encrypt(self.ring, b"body", AAD)
+        self.assertEqual(blob[3:4], envelope.BACKEND_GCM)
+        self.assertEqual(len(blob), envelope.HEADER_LEN + 4 + 16)
+
+    def test_legacy_envelopes_still_open(self):
+        """A format change that strands old records is data loss, not a format change."""
+        legacy = envelope.encrypt(self.ring, b"old record", AAD, backend=envelope.BACKEND_STDLIB)
+        self.assertEqual(envelope.peek(legacy).backend, "hmac-ctr-etm")
+        self.assertEqual(envelope.decrypt(self.ring, legacy, AAD), b"old record")
+
+    def test_unknown_backend_is_refused(self):
+        blob = bytearray(envelope.encrypt(self.ring, b"body", AAD))
+        blob[3] = 0x7F
+        with self.assertRaises(Tampered):
+            envelope.peek(bytes(blob))
 
     def test_flipped_ciphertext_byte_is_caught(self):
         blob = bytearray(envelope.encrypt(self.ring, b"the record body", AAD))
@@ -402,6 +419,62 @@ class FlowTests(unittest.TestCase):
         partitions = [source.emit("r0", b"2026-11-03T16:00:00Z actor=root action=delete")]
         report = audit_stream(self.ring, STREAM, partitions, source.sealed, expected_head=source.head)
         self.assertEqual(report.worst, "none", "no cryptographic layer here can see a source-side lie")
+
+
+class ArchiveTests(unittest.TestCase):
+    """Hashing the envelopes into the ledger: substitution caught without a decryption key."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = pathlib.Path(self.tmp.name)
+        self.ring = KeyRing(MASTER)
+        self.source = Source(self.ring, STREAM)
+        self.partitions = [self.source.emit(f"r{i}", f"body {i}".encode()) for i in range(3)]
+        self.book = archive.Archive(self.root / "digests.jsonl", b"ledger-key-material-32-bytes")
+        for partition in self.partitions:
+            self.book.store(partition, now=1_760_000_000.0)
+
+    def test_records_verify_clean(self):
+        self.assertEqual(self.book.verify(self.partitions).worst, "none")
+
+    def test_digest_is_stable_and_named(self):
+        self.assertEqual(archive.digest(self.partitions[0].blob), archive.digest(self.partitions[0].blob))
+        self.assertNotEqual(archive.digest(self.partitions[0].blob), archive.digest(self.partitions[1].blob))
+
+    def test_substituted_envelope_is_caught_without_decrypting(self):
+        # Same stream, same sequence, a perfectly valid envelope for different content: the
+        # ciphertext tag cannot object, because nothing about it is wrong.
+        forged = Partition(STREAM, 1, "r1", self.source.emit("r9", b"quietly different").blob)
+        swapped = [self.partitions[0], forged, self.partitions[2]]
+        verifier = archive.Archive(self.root / "digests.jsonl", b"ledger-key-material-32-bytes")
+        codes = {issue.code for issue in verifier.verify(swapped).issues}
+        self.assertEqual(codes, {"envelope_substituted"})
+
+    def test_removed_envelope_is_caught(self):
+        codes = {issue.code for issue in self.book.verify(self.partitions[:2]).issues}
+        self.assertEqual(codes, {"envelope_missing"})
+
+    def test_envelope_the_ledger_never_saw_is_flagged(self):
+        extra = self.source.emit("r9", b"appeared from nowhere")
+        codes = {issue.code for issue in self.book.verify(self.partitions + [extra]).issues}
+        self.assertEqual(codes, {"envelope_unrecorded"})
+
+    def test_edited_ledger_is_caught_by_the_chain(self):
+        ledger_file = self.root / "digests.jsonl"
+        lines = ledger_file.read_text().splitlines()
+        lines[1] = lines[1].replace('"bytes": ', '"bytes": 9')
+        ledger_file.write_text("\n".join(lines) + "\n")
+        codes = {issue.code for issue in self.book.verify(self.partitions).issues}
+        self.assertIn("digest_ledger_tampered", codes)
+
+    def test_the_digest_key_is_not_the_payload_key(self):
+        """Verification needs no decryption rights, which is the point of hashing separately."""
+        verifier = archive.Archive(self.root / "digests.jsonl", b"ledger-key-material-32-bytes")
+        self.assertEqual(verifier.verify(self.partitions).worst, "none")
+        stranger = KeyRing(b"a-different-master-secret-32-byte")
+        with self.assertRaises(Tampered):
+            envelope.decrypt(stranger, self.partitions[0].blob, aad_for(STREAM, 0))
 
 
 class ReportTests(unittest.TestCase):

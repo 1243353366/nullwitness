@@ -11,29 +11,31 @@ believing the first property covers both. It does not: an attacker who cannot re
 can still flip one, and a flipped byte in a log that decides whether someone was fired is a
 worse outcome than the log being unreadable.
 
-## About the construction, plainly
+## The cipher
 
-The sandbox this repository runs in has no `cryptography` package, so the AEAD here is
-built from the standard library: an HMAC-SHA256 counter-mode keystream for confidentiality
-and HMAC-SHA256 over the header and ciphertext for authentication (encrypt-then-MAC, with
-different subkeys for each job).
+**AES-256-GCM**, the standard authenticated cipher, with the nonce and associated data
+exactly where they belong. GCM authenticates the ciphertext and the AAD together, so the
+header and the context a record belongs to are as protected as the body:
 
-**This is a lab construction and it is not a substitute for AES-GCM or ChaCha20-Poly1305.**
-It has no hardware acceleration, it has no nonce-misuse resistance, it is written in Python
-so its timing is not constant, and reusing a nonce under one key is catastrophic in exactly
-the same way it is for any counter-mode cipher. The reason it exists is that the boundary
-checks below are the interesting part of this package and they are library-agnostic: swap
-`_keystream` and `_tag` for AES-GCM and every check still holds. Do that before protecting
-anything real.
+- the header is inside the tag, so the version and nonce cannot be rewritten
+- the AAD carries the stream and sequence, so a record cannot be moved to another asset or
+  epoch where it would mean something else
+- one tag failure, one error, no detail: a distinguishable failure is a free oracle
 
-What the construction does get right, and what the tests assert:
+Two implementations sit behind that, producing byte-identical envelopes:
 
-- encrypt-then-MAC, never MAC-then-encrypt, so no padding oracle can exist
-- separate subkeys for keystream and tag, so neither primitive's output is usable as the
-  other's input
-- the header is inside the MAC, so the version and nonce cannot be rewritten
-- associated data is inside the MAC, so the context a record belongs to is authenticated
-  with it: a record cannot be moved to another asset, epoch, or sequence number
+- `cryptography`'s AESGCM when installed, which is constant-time and hardware-accelerated
+- the pure-Python AES-256-GCM in `aesgcm.py` when it is not, checked against the published
+  GCM test vectors and cross-checked against the library on random inputs
+
+The pure-Python path is a portability fallback with an honest caveat, not a recommendation:
+its S-box is a table and its GHASH is a bit loop, so it leaks through timing. `aesgcm.py`
+says so at the top, and `lab/TRUST-CHAIN.md` repeats it where a reader deciding what to
+deploy will see it.
+
+The legacy HMAC-CTR construction from the first version of this file (`backend 0x01`) is
+still readable, because envelopes written by it exist and a format change that strands old
+records is not a format change, it is data loss. New records use GCM (`backend 0x02`).
 """
 
 from __future__ import annotations
@@ -44,12 +46,16 @@ import os
 from dataclasses import dataclass
 from typing import Dict, Optional, Set
 
+from lab.crypto import aesgcm
 from lab.crypto.keys import KeyRing
 
 VERSION = b"NW1"
-BACKEND_STDLIB = b"\x01"
-NONCE_LEN = 12
-TAG_LEN = 32
+BACKEND_STDLIB = b"\x01"  # legacy HMAC-CTR: read-only support, kept so old records open
+BACKEND_GCM = b"\x02"  # AES-256-GCM
+DEFAULT_BACKEND = BACKEND_GCM
+NONCE_LEN = aesgcm.NONCE_BYTES
+TAG_LEN = 32  # legacy tag length; GCM's is aesgcm.TAG_BYTES
+GCM_TAG_LEN = aesgcm.TAG_BYTES
 HEADER_LEN = len(VERSION) + 1 + NONCE_LEN
 
 PAYLOAD_PURPOSE = "payload"
@@ -92,7 +98,13 @@ def _tag(ring: KeyRing, header: bytes, aad: bytes, ciphertext: bytes) -> bytes:
     return hmac.new(key, message, hashlib.sha256).digest()
 
 
-def encrypt(ring: KeyRing, plaintext: bytes, aad: bytes = b"", nonce: Optional[bytes] = None) -> bytes:
+def encrypt(
+    ring: KeyRing,
+    plaintext: bytes,
+    aad: bytes = b"",
+    nonce: Optional[bytes] = None,
+    backend: bytes = DEFAULT_BACKEND,
+) -> bytes:
     """Encrypt and authenticate. The AAD is the context: asset, epoch, sequence.
 
     Callers should put the record's identity and position in the AAD. Without it the
@@ -102,9 +114,16 @@ def encrypt(ring: KeyRing, plaintext: bytes, aad: bytes = b"", nonce: Optional[b
     nonce = os.urandom(NONCE_LEN) if nonce is None else nonce
     if len(nonce) != NONCE_LEN:
         raise ValueError(f"nonce must be {NONCE_LEN} bytes")
-    header = VERSION + BACKEND_STDLIB + nonce
-    ciphertext = bytes(a ^ b for a, b in zip(plaintext, _keystream(ring, nonce, len(plaintext))))
-    return header + ciphertext + _tag(ring, header, aad, ciphertext)
+    header = VERSION + backend + nonce
+    if backend == BACKEND_GCM:
+        # GCM authenticates the header through the AAD, so the version, backend byte, and
+        # nonce are covered without a separate MAC pass over them.
+        sealed = aesgcm.encrypt(ring.subkey(PAYLOAD_PURPOSE).material, nonce, plaintext, header + aad)
+        return header + sealed
+    if backend == BACKEND_STDLIB:
+        ciphertext = bytes(a ^ b for a, b in zip(plaintext, _keystream(ring, nonce, len(plaintext))))
+        return header + ciphertext + _tag(ring, header, aad, ciphertext)
+    raise ValueError(f"unknown backend {backend!r}")
 
 
 @dataclass(frozen=True)
@@ -117,24 +136,40 @@ class EnvelopeInfo:
     tag_length: int
 
 
+BACKEND_NAMES = {BACKEND_STDLIB: "hmac-ctr-etm", BACKEND_GCM: "aes-256-gcm"}
+BACKEND_TAG_LEN = {BACKEND_STDLIB: TAG_LEN, BACKEND_GCM: GCM_TAG_LEN}
+
+
 def peek(blob: bytes) -> EnvelopeInfo:
-    if len(blob) < HEADER_LEN + TAG_LEN:
+    if len(blob) < HEADER_LEN + GCM_TAG_LEN:
         raise Tampered(f"envelope is {len(blob)} bytes, shorter than a header and tag")
     if blob[:3] != VERSION:
         raise Tampered(f"unknown envelope version {blob[:3]!r}")
-    backend = "hmac-ctr-etm" if blob[3:4] == BACKEND_STDLIB else f"unknown({blob[3:4]!r})"
+    backend_id = blob[3:4]
+    tag_len = BACKEND_TAG_LEN.get(backend_id)
+    if tag_len is None:
+        raise Tampered(f"unknown backend {backend_id!r}")
     return EnvelopeInfo(
-        backend=backend,
+        backend=BACKEND_NAMES[backend_id],
         nonce=blob[4:HEADER_LEN],
-        ciphertext_length=len(blob) - HEADER_LEN - TAG_LEN,
-        tag_length=TAG_LEN,
+        ciphertext_length=len(blob) - HEADER_LEN - tag_len,
+        tag_length=tag_len,
     )
 
 
 def decrypt(ring: KeyRing, blob: bytes, aad: bytes = b"") -> bytes:
     """Authenticate first, decrypt second. Never the other way round."""
-    info = peek(blob)  # raises Tampered on a truncated or mis-versioned envelope
+    info = peek(blob)  # raises Tampered on a truncated, mis-versioned, or unknown envelope
     header = blob[:HEADER_LEN]
+    if blob[3:4] == BACKEND_GCM:
+        try:
+            return aesgcm.decrypt(ring.subkey(PAYLOAD_PURPOSE).material, info.nonce, blob[HEADER_LEN:], header + aad)
+        except aesgcm.AuthenticationError:
+            raise Tampered(
+                "ciphertext, header, or associated data does not authenticate: this envelope was "
+                "modified, or it was encrypted under a different key, and the two are not "
+                "distinguishable from inside the protocol"
+            ) from None
     ciphertext = blob[HEADER_LEN:-TAG_LEN]
     tag = blob[-TAG_LEN:]
     expected = _tag(ring, header, aad, ciphertext)
