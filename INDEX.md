@@ -4,7 +4,7 @@ One entry point for everything in this repository. Generated from the tree by
 `tools/build_index.py`, and checked by a test, so a stale link fails the suite instead
 of rotting quietly.
 
-**16 documents · 45 Python modules · 193 test cases · 6 other source files · 14,297 lines.**
+**17 documents · 53 Python modules · 246 test cases · 6 other source files · 16,462 lines.**
 
 ## Start here
 
@@ -78,6 +78,7 @@ of rotting quietly.
 - [`lab/.env.example`](lab/.env.example): file
 - [`lab/ARCHITECTURE.md`](lab/ARCHITECTURE.md): Layer by layer: ingestion, storage, features, model, monitoring, integrity.
 - [`lab/COUNTER-ANTI-FORENSICS.md`](lab/COUNTER-ANTI-FORENSICS.md): The base monitor in `lab/integrity/` catches an attacker who deletes, truncates, or edits
+- [`lab/DEFENSE-ECONOMICS.md`](lab/DEFENSE-ECONOMICS.md): Four principles, each with a module that computes it rather than asserting it:
 - [`lab/DESIGN-NOTES.md`](lab/DESIGN-NOTES.md): Design reasoning, including the rejected approaches.
 - [`lab/ETHICS-AND-LIMITS.md`](lab/ETHICS-AND-LIMITS.md): What the lab will not build and why: attribution, probing, bait documents, manipulation.
 - [`lab/INTEGRITY.md`](lab/INTEGRITY.md): Forensic-integrity monitor: channels, threat model, false positives, and the case that defeats it.
@@ -113,6 +114,16 @@ of rotting quietly.
 **lab/**
 
 - [`lab/docker-compose.yml`](lab/docker-compose.yml): Local stack definition. Unverified here: no Docker in the sandbox.
+
+**lab/economics/**
+
+- [`lab/economics/__init__.py`](lab/economics/__init__.py): Defense economics: cost, resilience, adaptation, and proportionality with numbers.
+- [`lab/economics/adaptation.py`](lab/economics/adaptation.py): Adaptation: each finding becomes a change that costs the attacker more next time.
+- [`lab/economics/cli.py`](lab/economics/cli.py): Command line for the economics layer.
+- [`lab/economics/fingerprint.py`](lab/economics/fingerprint.py): Profiling the attacker in proportion to what they are getting out of you.
+- [`lab/economics/model.py`](lab/economics/model.py): Defense economics: what a control costs, what it buys, and when the answer is "nothing".
+- [`lab/economics/resilience.py`](lab/economics/resilience.py): Resilience: what survives, what you get back, and how long it takes.
+- [`lab/economics/tiers.py`](lab/economics/tiers.py): The tier ladder: what an asset's value obliges you to run, and what it obliges you to skip.
 
 **lab/enrich/**
 
@@ -177,6 +188,7 @@ of rotting quietly.
 - [`lab/tests/test_canary.py`](lab/tests/test_canary.py): Tests for the canary modules: tokens, tamper detection, callback listener.
 - [`lab/tests/test_counterforensics.py`](lab/tests/test_counterforensics.py): Tests for the counter-anti-forensic layer.
 - [`lab/tests/test_crypto.py`](lab/tests/test_crypto.py): Tests for the trust chain: five properties, each with a case that holds and one that fails.
+- [`lab/tests/test_economics.py`](lab/tests/test_economics.py): Tests for the economics layer: arithmetic, proportionality, ladder, loop.
 - [`lab/tests/test_index.py`](lab/tests/test_index.py): Fails when INDEX.md has drifted from the tree.
 - [`lab/tests/test_integrity.py`](lab/tests/test_integrity.py): Integrity cases: positives, negatives, and the single-host rollback limit.
 - [`lab/tests/test_lab.py`](lab/tests/test_lab.py): Tests for the experimental lab.

@@ -114,6 +114,8 @@ lab/
   TRUST-CHAIN.md            the five properties: encryption, authentication, keys, boot, endpoint
   crypto/aesgcm.py          AES-256-GCM, NIST-verified, library-backed when available
   crypto/archive.py         envelope digests chained into the integrity ledger
+  DEFENSE-ECONOMICS.md      asymmetry, proportionality, resilience, adaptation with numbers
+  economics/                the same four as code: tiers, cost model, profiling depth, the loop
   tests/                    68 unittest cases, no pytest needed
   ingest/                   C++ bounded queue, Makefile, self-test
   schema/                   TimescaleDB schema, RLS, rollup view
