@@ -4,7 +4,7 @@ One entry point for everything in this repository. Generated from the tree by
 `tools/build_index.py`, and checked by a test, so a stale link fails the suite instead
 of rotting quietly.
 
-**17 documents · 54 Python modules · 267 test cases · 6 other source files · 17,135 lines.**
+**18 documents · 55 Python modules · 282 test cases · 6 other source files · 17,797 lines.**
 
 ## Start here
 
@@ -83,6 +83,7 @@ of rotting quietly.
 - [`lab/ETHICS-AND-LIMITS.md`](lab/ETHICS-AND-LIMITS.md): What the lab will not build and why: attribution, probing, bait documents, manipulation.
 - [`lab/INTEGRITY.md`](lab/INTEGRITY.md): Forensic-integrity monitor: channels, threat model, false positives, and the case that defeats it.
 - [`lab/README.md`](lab/README.md): Orientation for the lab: what runs, what is verified, what is not.
+- [`lab/RESPONSE-TIMING.md`](lab/RESPONSE-TIMING.md): Acting early is a decision. So is waiting. This is the arithmetic for both, taken from the same
 - [`lab/TRUST-CHAIN.md`](lab/TRUST-CHAIN.md): Five properties, in the order they bind:
 - [`lab/WEAKNESSES-AND-FIXES.md`](lab/WEAKNESSES-AND-FIXES.md): Known weaknesses and what was done about each.
 - [`lab/__init__.py`](lab/__init__.py): Python module
@@ -125,6 +126,7 @@ of rotting quietly.
 - [`lab/economics/model.py`](lab/economics/model.py): Defense economics: what a control costs, what it buys, and when the answer is "nothing".
 - [`lab/economics/resilience.py`](lab/economics/resilience.py): Resilience: what survives, what you get back, and how long it takes.
 - [`lab/economics/tiers.py`](lab/economics/tiers.py): The tier ladder: what an asset's value obliges you to run, and what it obliges you to skip.
+- [`lab/economics/timing.py`](lab/economics/timing.py): When to act, priced instead of felt.
 
 **lab/enrich/**
 

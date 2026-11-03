@@ -116,6 +116,8 @@ lab/
   crypto/archive.py         envelope digests chained into the integrity ledger
   DEFENSE-ECONOMICS.md      asymmetry, proportionality, resilience, adaptation with numbers
   economics/                the same four as code: tiers, cost model, profiling depth, the loop
+  economics/timing.py       act now or hold, priced against the evidence a tip-off would cost
+  RESPONSE-TIMING.md        CISA's containment considerations, made executable
   tests/                    68 unittest cases, no pytest needed
   ingest/                   C++ bounded queue, Makefile, self-test
   schema/                   TimescaleDB schema, RLS, rollup view

@@ -17,7 +17,7 @@ import argparse
 import json
 from typing import Dict, List, Optional, Sequence
 
-from lab.economics import adaptation, discipline, fingerprint, resilience, tiers
+from lab.economics import adaptation, discipline, fingerprint, resilience, tiers, timing
 from lab.economics.model import Asset, Plan, Threat, Verdict
 from lab.economics.tiers import CONTROLS, DEFAULT_THREATS
 
@@ -209,6 +209,54 @@ def _discipline(value: float) -> str:
     return "\n".join(lines)
 
 
+TIMING_SCENARIOS = {
+    "slow bleed, evidence still worth collecting": dict(
+        damage_per_hour=80,
+        dwell_hours=48,
+        evidence_value=40_000,
+        destroy_if_tipped=0.7,
+        tactics_shift_cost=25_000,
+        capability=0.7,
+        maturity=1,
+    ),
+    "fast bleed, evidence mostly collected": dict(
+        damage_per_hour=9_000,
+        dwell_hours=12,
+        evidence_value=8_000,
+        destroy_if_tipped=0.6,
+        tactics_shift_cost=5_000,
+        capability=0.6,
+        maturity=2,
+    ),
+}
+
+
+def _timing() -> str:
+    lines: List[str] = []
+    for title, values in TIMING_SCENARIOS.items():
+        situation = timing.Situation(**values)
+        lines.append(f"{title}: bleeding {_money(situation.damage_per_hour)}/hour, "
+                     f"{situation.dwell_hours:g}h of dwell, {_money(situation.evidence_value)} of evidence uncollected")
+        lines.append(f"  {'action':<20} {'avail':>6} {'stopped':>9} {'evid lost':>10} {'tactics':>9} {'self':>8} {'net':>11}")
+        for row in timing.assess(situation):
+            lines.append(
+                f"  {row['action']:<20} {('yes' if row['available'] else 'no'):>6} {_money(row['damage_avoided']):>9} "
+                f"{_money(row['evidence_forfeited']):>10} {_money(row['tactics_cost']):>9} {_money(row['self_inflicted']):>8} "
+                f"{_money(row['net']):>11}"
+            )
+        steps = timing.recommended_sequence(situation)
+        plan = timing.sequence(situation, steps)
+        lines.append(f"  sequence: {' -> '.join(steps)}")
+        lines.append(f"  cumulative leak across the sequence: {plan['cumulative_leak']:.0%}; net {_money(plan['cumulative_net'])}")
+        for action in ("evict", "silent_containment"):
+            for verdict in timing.judge(situation, action):
+                lines.append(f"  [{verdict.severity}] {verdict.code}: {verdict.detail}")
+        lines.append("")
+    lines.append("A hold is not inaction: it is capture plus observation, paid for while the adversary is unaware,")
+    lines.append("so that the revealing move happens once, on your schedule, with the picture complete.")
+    return "\n".join(lines)
+
+
 def _ladder(value: float, threats: Sequence[Threat]) -> str:
     lines = [f"ladder for an asset worth {_money(value)}", ""]
     lines.append(f"  {'tier':<5} {'name':<12} {'controls':>8} {'cost':>9} {'spend':>7} {'exp loss':>10} {'depth':>6}")
@@ -299,7 +347,7 @@ def _demo() -> str:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Defense economics")
-    parser.add_argument("action", choices=["ladder", "report", "adapt", "demo", "discipline"], nargs="?", default="report")
+    parser.add_argument("action", choices=["ladder", "report", "adapt", "demo", "discipline", "timing"], nargs="?", default="report")
     parser.add_argument("--value", type=float, default=250_000.0)
     parser.add_argument("--tier", type=int, default=None)
     parser.add_argument("--name", default="asset")
@@ -315,6 +363,23 @@ def main(argv=None) -> int:
 
     if args.action == "ladder":
         print(_ladder(args.value, threats))
+        return 0
+
+    if args.action == "timing":
+        if args.json:
+            payload = {}
+            for title, values in TIMING_SCENARIOS.items():
+                situation = timing.Situation(**values)
+                steps = timing.recommended_sequence(situation)
+                payload[title] = {
+                    "assess": timing.assess(situation),
+                    "judgements": {action: [v.__dict__ for v in timing.judge(situation, action)]
+                                   for action in ("evict", "silent_containment")},
+                    "sequence": timing.sequence(situation, steps),
+                }
+            print(json.dumps(payload, indent=2, sort_keys=True))
+            return 0
+        print(_timing())
         return 0
 
     if args.action == "discipline":

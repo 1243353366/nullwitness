@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import unittest
 
-from lab.economics import adaptation, discipline, fingerprint, resilience, tiers
+from lab.economics import adaptation, discipline, fingerprint, resilience, tiers, timing
 from lab.economics.model import Asset, Control, Plan, Threat
 
 SMALL = Asset("test asset", 10_000.0, tier=1)
@@ -508,6 +508,105 @@ class DisciplineTests(unittest.TestCase):
         """The bug this replaced: pricing an absent control returned zero benefit."""
         benefit = discipline._benefit_of_adding(self.plan, tiers.CONTROLS["source_seal"], self.threats)
         self.assertGreater(benefit, 0)
+
+
+class TimingTests(unittest.TestCase):
+    """Acting early is a decision with a price; holding is a decision with a different one."""
+
+    def slow(self, **overrides):
+        values = dict(
+            damage_per_hour=80, dwell_hours=48, evidence_value=40_000,
+            destroy_if_tipped=0.7, tactics_shift_cost=25_000, capability=0.7, maturity=1,
+        )
+        values.update(overrides)
+        return timing.Situation(**values)
+
+    def fast(self, **overrides):
+        values = dict(
+            damage_per_hour=9_000, dwell_hours=12, evidence_value=8_000,
+            destroy_if_tipped=0.6, tactics_shift_cost=5_000, capability=0.6, maturity=2,
+        )
+        values.update(overrides)
+        return timing.Situation(**values)
+
+    def test_damage_if_hold_is_rate_times_window(self):
+        self.assertEqual(self.slow().damage_if_hold, 80 * 48)
+
+    def test_cost_terms_are_computed_by_hand(self):
+        situation = self.slow()
+        cost = timing.cost_of(timing.BY_NAME["evict"], situation)
+        self.assertAlmostEqual(cost["damage_avoided"], 1.0 * 3_840)
+        self.assertAlmostEqual(cost["evidence_forfeited"], 40_000 * 0.90 * 0.7)
+        self.assertAlmostEqual(cost["tactics_cost"], 25_000 * 0.90 * 0.7)
+        self.assertAlmostEqual(cost["self_inflicted"], 20_000)
+
+    def test_holding_costs_nothing_by_construction(self):
+        self.assertEqual(timing.cost_of(timing.BY_NAME["hold"], self.slow())["net"], 0.0)
+
+    def test_slow_bleed_makes_eviction_premature(self):
+        codes = {verdict.code for verdict in timing.judge(self.slow(), "evict")}
+        self.assertIn("premature_action_refused", codes)
+        self.assertIn("evidence_at_risk", codes)
+
+    def test_fast_bleed_makes_eviction_the_right_move(self):
+        codes = {verdict.code for verdict in timing.judge(self.fast(), "evict")}
+        self.assertIn("act_now_justified", codes)
+
+    def test_quiet_steps_are_holds(self):
+        for name in ("observe", "preserve_evidence", "instrument_deeper"):
+            codes = {verdict.code for verdict in timing.judge(self.slow(), name)}
+            self.assertIn("hold_justified", codes, name)
+
+    def test_silent_containment_beats_eviction_when_evidence_is_dear(self):
+        rows = {row["action"]: row for row in timing.assess(self.slow())}
+        self.assertGreater(rows["silent_containment"]["net"], rows["evict"]["net"])
+        self.assertLess(rows["silent_containment"]["reveals"], rows["evict"]["reveals"])
+
+    def test_sandbox_redirection_is_gated_on_maturity(self):
+        codes = {verdict.code for verdict in timing.judge(self.slow(maturity=1), "sandbox_redirect")}
+        self.assertIn("action_unavailable", codes)
+        rows = {row["action"]: row for row in timing.assess(self.slow(maturity=2))}
+        self.assertTrue(rows["sandbox_redirect"]["available"])
+
+    def test_notifying_users_is_dominated(self):
+        rows = {row["action"]: row for row in timing.assess(self.slow())}
+        self.assertEqual(rows["notify_users"]["reveals"], 1.0)
+        self.assertLess(rows["notify_users"]["net"], rows["preserve_evidence"]["net"])
+
+    def test_public_disclosure_is_a_communications_decision(self):
+        forwarded = timing.cost_of(timing.BY_NAME["public_disclosure"], self.slow())
+        self.assertEqual(forwarded["reveals"], 1.0)
+        self.assertLess(forwarded["damage_avoided"], forwarded["evidence_forfeited"])
+
+    def test_sequence_leak_compounds(self):
+        result = timing.sequence(self.slow(), ["preserve_evidence", "observe", "silent_containment"])
+        expected = 1 - (1 - 0.02) * (1 - 0.05) * (1 - 0.15)
+        self.assertAlmostEqual(result["cumulative_leak"], round(expected, 4))
+        self.assertGreater(result["cumulative_leak"], 0.15)
+
+    def test_sequence_runs_quiet_steps_first(self):
+        steps = timing.recommended_sequence(self.slow())
+        self.assertEqual(steps[0], "preserve_evidence")
+        self.assertLess(timing.BY_NAME[steps[0]].reveals, timing.BY_NAME["silent_containment"].reveals)
+        self.assertNotIn("evict", steps)
+
+    def test_fast_bleed_pushes_eviction_into_the_sequence(self):
+        self.assertIn("evict", timing.recommended_sequence(self.fast()))
+
+    def test_integrity_work_lowers_the_cost_of_acting(self):
+        """The tie to the trust chain: if they cannot destroy the evidence, tipper-off is cheaper."""
+        vulnerable = self.slow(destroy_if_tipped=0.9)
+        hardened = self.slow(destroy_if_tipped=0.1)
+        self.assertLess(
+            timing.cost_of(timing.BY_NAME["evict"], hardened)["evidence_forfeited"],
+            timing.cost_of(timing.BY_NAME["evict"], vulnerable)["evidence_forfeited"],
+        )
+
+    def test_unknown_action_is_an_error(self):
+        with self.assertRaises(KeyError):
+            timing.judge(self.slow(), "nuke_it")
+        with self.assertRaises(KeyError):
+            timing.sequence(self.slow(), ["nuke_it"])
 
 
 class ProportionalityTests(unittest.TestCase):
