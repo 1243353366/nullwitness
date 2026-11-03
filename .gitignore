@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+bridge/out/
+lab/reports/
+lab/ingest/collector_selftest

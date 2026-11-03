@@ -1,6 +1,10 @@
 # Data Deception and Legal Boundaries
 
-*Repository: **nullwitness**. The title above is the subject, not the product name.
+*Repository: **nullwitness**. The title above is the subject, not the product name.*
+
+**Everything in one place: [`INDEX.md`](INDEX.md)**, a generated entry point listing every
+document, module, and command. It is checked against the tree by the test suite, so it
+cannot silently go stale.
 Read [`AUTHORS-NOTE.md`](AUTHORS-NOTE.md) first: most of what follows is assembly and
 experimentation on existing ideas, not invention, and the note is explicit about which
 parts are established, which are unvalidated, and which are deliberately speculative.*
