@@ -111,6 +111,7 @@ lab/
   integrity/                evidence-state monitor: ledger, detectors, adversarial demo
   INTEGRITY.md              threat model, channels, false-positive policy, limits
   COUNTER-ANTI-FORENSICS.md the adversary who read this repo: techniques, detectors, limits
+  TRUST-CHAIN.md            the five properties: encryption, authentication, keys, boot, endpoint
   tests/                    68 unittest cases, no pytest needed
   ingest/                   C++ bounded queue, Makefile, self-test
   schema/                   TimescaleDB schema, RLS, rollup view
