@@ -4,9 +4,9 @@ One entry point for everything in this repository. Generated from the tree by
 `tools/build_index.py`, and checked by a test, so a stale link fails the suite instead
 of rotting quietly.
 
-**6 documents · 2 Python modules · 0 test cases · 0 other source files · 1,522 lines.**
+**7 documents · 2 Python modules · 0 test cases · 0 other source files · 1,573 lines.**
 
-This branch is documentation only. The executable lab is on the [`experimental` branch](https://github.com/1243353366/nullwitness/tree/experimental), indexed by the `INDEX.md` there.
+This branch is the written material, and the only thing here that runs is the generator that builds this page. The executable lab is on the [`experimental` branch](https://github.com/1243353366/nullwitness/tree/experimental), indexed by the `INDEX.md` there.
 
 ## Start here
 
@@ -17,25 +17,20 @@ This branch is documentation only. The executable lab is on the [`experimental` 
 | [`LEGAL.md`](LEGAL.md) | The boundaries the material is written inside. |
 | [`SAFETY.md`](SAFETY.md) | Constraints that apply everywhere. |
 
-## Commands on the experimental branch
+## Commands
 
 | Command | What it does |
 | --- | --- |
-| `python3 -m unittest discover -s lab/tests -t .` | every Python test |
-| `python3 -m lab.integrity.cli demo` | integrity monitor, ten scenarios |
-| `python3 -m lab.integrity.cli demo --json` | the same findings as JSON |
-| `python3 -m lab.orchestrator.run_pipeline --write-report` | traffic pipeline end to end, synthetic data |
-| `make -C lab/ingest check` | C++ bounded-queue self-test |
-| `make -C bridge check JAVAC=javac JAVA=java` | Java bridge self-test |
-| `make -C bridge run JAVAC=javac JAVA=java` | bridge reads scenarios.json, writes the report |
 | `python3 tools/build_index.py --check` | verify this index matches the tree |
+
+9 more commands need files that are not on this branch; the `INDEX.md` on `experimental` lists them.
 
 ## Branches
 
 | Branch | Holds |
 | --- | --- |
-| `main` | The written material, static by design. Nothing executes here. |
-| `experimental` | The written material plus the lab and the bridge: pipeline, canaries, integrity monitor. |
+| `main` | This branch: the written material, the archived material, and the generator that builds this page. That generator is the only thing here that runs. |
+| `experimental` | The written material plus the lab and the bridge: pipeline, canaries, integrity monitor, economics, and the tests. |
 | `build/static-educational-sandbox` | Earlier static build. |
 
 ## Every file
