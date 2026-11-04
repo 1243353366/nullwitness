@@ -76,9 +76,15 @@ def issue(label: str, secret: str, salt_epoch: str) -> CanaryToken:
 
 
 def verify(token_id: str, label: str, secret: str, salt_epoch: str) -> bool:
-    """True only if `token_id` is what this key would have issued for (label, epoch)."""
+    """True only if `token_id` is what this key would have issued for (label, epoch).
+
+    A malformed id is a False, not an exception. Raising here made "that is not even the
+    right shape" a distinct observable from "that is the right shape and the wrong token",
+    which tells a prober when their guess has started to hit the format. There is nothing a
+    caller can do with the difference that it cannot do with the boolean.
+    """
     if not token_id or not token_id.startswith(f"{TOKEN_PREFIX}_"):
-        raise TokenError("not a canary token id")
+        return False
     expected = issue(label, secret, salt_epoch).token_id
     return hmac.compare_digest(expected, token_id)
 

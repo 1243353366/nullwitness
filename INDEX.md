@@ -4,7 +4,7 @@ One entry point for everything in this repository. Generated from the tree by
 `tools/build_index.py`, and checked by a test, so a stale link fails the suite instead
 of rotting quietly.
 
-**21 documents · 59 Python modules · 341 test cases · 6 other source files · 19,634 lines.**
+**21 documents · 59 Python modules · 342 test cases · 6 other source files · 19,919 lines.**
 
 ## Start here
 

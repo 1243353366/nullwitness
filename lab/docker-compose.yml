@@ -1,32 +1,66 @@
 # lab/docker-compose.yml
 #
-# Two services: a TimescaleDB instance with the schema applied, and a one-shot
+# The pilot stack: a TimescaleDB instance with the schema applied, and a one-shot
 # pipeline runner. Credentials come from lab/.env, which is gitignored.
 #
 #   cp lab/.env.example lab/.env
 #   docker compose -f lab/docker-compose.yml up --build
 #
-# Status: unverified. The lab sandbox has no Docker daemon, so this file has been
-# reviewed for syntax and intent but never started. Expect to adjust the image tag or
-# the init ordering on a real host.
+# Status: reviewed and internally consistent; still unstarted, because the lab sandbox has
+# no Docker daemon. What that means is spelled out in the disclosure section of
+# lab/README.md rather than implied here.
+#
+# Three things this file used to get wrong, all fixed below:
+#
+#   1. It told the pipeline service to connect as `lab_analysis`, and `001_schema.sql`
+#      creates that role NOLOGIN. Nothing could ever have authenticated as it. The pipeline
+#      no longer claims a database connection it does not make, and `002_pilot_roles.sh`
+#      grants LOGIN to the least-privilege roles when passwords are supplied, so the paths
+#      that do use them (the R enrichment step) can work.
+#   2. Its healthcheck asked only whether the server accepted connections. Init scripts run
+#      once, on an empty volume; on a volume from an older schema the server is healthy and
+#      the tables are missing, which is the failure that looks like a code bug. The check
+#      now waits for the schema's own tables.
+#   3. It published Postgres on every interface. A pilot runs on a laptop or a shared host;
+#      loopback is the default that does not require anyone to remember a flag.
+#
+# What it deliberately does not do: run the R enrichment step. That needs R with DBI and
+# RPostgres and a libpq client, which is a different image; lab/README.md documents running
+# it from a host that has them. Pretending otherwise in a compose file is how a pilot gets
+# a service that starts and then fails at the last step.
 
 services:
   timescaledb:
-    image: timescale/timescaledb:latest-pg16
+    # Pin by setting TIMESCALE_IMAGE. The default tracks a mutable tag, which is a pilot
+    # convenience and a reproducibility problem, and the disclosure says so.
+    image: ${TIMESCALE_IMAGE:-timescale/timescaledb:latest-pg16}
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-lab}
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      # Consumed by 002_pilot_roles.sh, not by the server. Blank means "leave the roles
+      # NOLOGIN"; the enrichment step then cannot connect, which is the safe default.
+      ANALYSIS_PASSWORD: ${ANALYSIS_PASSWORD:-}
+      INGEST_PASSWORD: ${INGEST_PASSWORD:-}
     ports:
-      - "${PGPORT:-5432}:5432"
+      - "127.0.0.1:${PGPORT:-5432}:5432"
     volumes:
       - timescale-data:/var/lib/postgresql/data
       - ./schema:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      # Ready means "the schema is there", not just "the socket is open". The second
+      # condition is what a stale volume fails, and failing it keeps the runner waiting
+      # instead of letting it write a report against no database.
+      test:
+        - CMD-SHELL
+        - >-
+          pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" &&
+          psql -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -tAc
+          "SELECT 1 FROM information_schema.tables WHERE table_name = 'events'" | grep -q 1
       interval: 5s
       timeout: 5s
-      retries: 12
+      retries: 30
+      start_period: 20s
     restart: unless-stopped
 
   pipeline:
@@ -39,12 +73,10 @@ services:
       - ..:/repo:ro
       - ./reports:/repo/lab/reports
     environment:
-      PGHOST: timescaledb
-      PGPORT: 5432
-      PGDATABASE: ${POSTGRES_DB:-lab}
-      PGUSER: ${PGUSER:-lab_analysis}
-      PGPASSWORD: ${PGPASSWORD:?PGPASSWORD is required}
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    # The pipeline reads synthetic data in memory and writes a Markdown report. It opens no
+    # database connection, so it gets no credentials: passing PGHOST and PGPASSWORD to a
+    # process that never dials is configuration that reads like a guarantee and is not one.
     command: >
       sh -c "pip install --quiet --no-cache-dir -r lab/requirements.txt &&
              python3 -m lab.orchestrator.run_pipeline --write-report"

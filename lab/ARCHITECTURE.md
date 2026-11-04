@@ -59,7 +59,7 @@ convention; with two, it is a test.
 | `observed_at` | float epoch seconds, UTC | the only ordering key; partition key |
 | `source_id` | string | which owned asset produced the record |
 | `client_key` | 16 hex chars | salted, truncated hash; no address is stored |
-| `channel` | closed vocabulary | `feed_item`, `canary_access`, `honeytoken_access`, `site_visit` |
+| `channel` | closed vocabulary | `feed_item`, `canary_access`, `canary_probe`, `honeytoken_access`, `site_visit` |
 | `protocol` | closed vocabulary | `http/1.1`, `h2`, `h3`, `unknown` |
 | `ua_family` | closed vocabulary | coarse classification, not the raw header |
 | `fingerprint_hash` | string | salted hash of a TLS/HTTP fingerprint, stable within a salt epoch |

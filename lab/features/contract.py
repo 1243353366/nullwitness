@@ -36,7 +36,12 @@ UA_FAMILIES = (
     "unknown",
 )
 NETWORK_CLASSES = ("residential", "mobile", "datacenter", "unknown")
-CHANNELS = ("feed_item", "canary_access", "honeytoken_access", "site_visit")
+# `canary_probe` exists because the two are not the same observation. `canary_access` means
+# a token this operator issued was fetched: the document leaked. `canary_probe` means
+# something requested a well-formed token path that this key never issued: somebody is
+# guessing the shape, or scraping for canaries to strip. Collapsing them made the first
+# signal free to forge by anyone who could count to sixteen hex characters.
+CHANNELS = ("feed_item", "canary_access", "canary_probe", "honeytoken_access", "site_visit")
 
 
 class ContractViolation(ValueError):

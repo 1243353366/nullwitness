@@ -110,7 +110,7 @@ class ListenerTests(unittest.TestCase):
             epoch = "2026-11"
             token = tokens.issue("site-footer", secret, epoch)
 
-            with listener.serve(jsonl, secret, epoch) as srv:
+            with listener.serve(jsonl, secret, epoch, known_labels=("site-footer",)) as srv:
                 url = f"http://127.0.0.1:{srv.bound_port}/c/{token.token_id}"
                 request = urllib.request.Request(url, headers={"User-Agent": "curl/8.4.0"})
                 with urllib.request.urlopen(request, timeout=5) as response:
@@ -124,10 +124,30 @@ class ListenerTests(unittest.TestCase):
             self.assertEqual(event["channel"], "canary_access")
             self.assertEqual(event["ua_family"], "curl")
             self.assertEqual(event["labels"]["token_id"], token.token_id)
+            self.assertEqual(event["labels"]["token_state"], "issued")
+            # bytes_in used to be the User-Agent's length, which a feature would read as
+            # request size. It has to be at least the request line plus the headers.
+            self.assertGreater(event["bytes_in"], len("curl/8.4.0"))
             self.assertEqual(
                 event["client_key"],
                 contract.derive_client_key(secret.encode("utf-8"), epoch, "127.0.0.1"),
             )
+            contract.EventRecord(**event).validate()
+
+    def test_a_token_nobody_issued_is_recorded_as_a_probe_not_a_hit(self):
+        """The point of the split: a guessed token must not look like a leaked document."""
+        with tempfile.TemporaryDirectory() as tmp:
+            jsonl = pathlib.Path(tmp) / "events.jsonl"
+            secret = tokens.new_secret()
+            epoch = "2026-11"
+            with listener.serve(jsonl, secret, epoch, known_labels=("site-footer",)) as srv:
+                invented = "/c/cnry_" + "0" * 16
+                with urllib.request.urlopen(f"http://127.0.0.1:{srv.bound_port}{invented}", timeout=5) as response:
+                    self.assertEqual(response.status, 204, "the response must not reveal which tokens exist")
+
+            event = json.loads(jsonl.read_text().splitlines()[0])
+            self.assertEqual(event["channel"], "canary_probe")
+            self.assertEqual(event["labels"]["token_state"], "unissued")
             contract.EventRecord(**event).validate()
 
     def test_unknown_path_is_rejected(self):

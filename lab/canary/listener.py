@@ -69,12 +69,32 @@ def _protocol(request_version: str) -> str:
 class CanaryServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
 
-    def __init__(self, address, jsonl_path: pathlib.Path, secret: str, salt_epoch: str):
+    def __init__(
+        self,
+        address,
+        jsonl_path: pathlib.Path,
+        secret: str,
+        salt_epoch: str,
+        known_labels: Sequence[str] = (),
+    ):
         super().__init__(address, CanaryHandler)
         self.jsonl_path = pathlib.Path(jsonl_path)
         self.secret = secret
         self.salt_epoch = salt_epoch
+        self.known_labels = tuple(known_labels)
         self._lock = threading.Lock()
+
+    def token_is_issued(self, token_id: str) -> bool:
+        """Whether this key would have issued `token_id` for a label we know about.
+
+        Without this the listener logs every well-formed token id as a hit, including the
+        ones a scanner invents while probing for the path shape. That is not a false
+        positive in the usual sense: it is a detection signal that anybody can raise by
+        guessing sixteen hex characters, which makes the signal worthless and buries the
+        real one. A token nobody issued is still worth recording, but it is a different
+        event, and the difference is measurable.
+        """
+        return any(tokens.verify(token_id, label, self.secret, self.salt_epoch) for label in self.known_labels)
 
     def record(self, event: contract.EventRecord) -> None:
         line = json.dumps(event.to_row(), sort_keys=True)
@@ -106,19 +126,23 @@ class CanaryHandler(http.server.BaseHTTPRequestHandler):
             server.salt_epoch,
             self.client_address[0],
         )
+        issued = server.token_is_issued(token_id)
         event = contract.EventRecord(
             event_id=uuid.uuid4().hex,
             observed_at=time.time(),
             source_id="canary:token",
             client_key=client_key,
-            channel="canary_access",
+            channel="canary_access" if issued else "canary_probe",
             protocol=_protocol(self.request_version),
             ua_family=classify_ua(self.headers.get("User-Agent")),
             fingerprint_hash="unavailable",  # no TLS termination at this layer
             network_class="unknown",
-            bytes_in=len(self.headers.get("User-Agent", "")),
+            # Not the User-Agent's length, which is what this used to report: a feature
+            # caller would read as request size and get a number between 0 and 200 that
+            # moves with browser branding. The honest value is the bytes actually read.
+            bytes_in=len(self.requestline) + 1 + sum(len(k) + len(v) + 4 for k, v in self.headers.items()),
             latency_ms=0.0,
-            labels={"token_id": token_id},
+            labels={"token_id": token_id, "token_state": "issued" if issued else "unissued"},
         )
         try:
             server.record(event)
@@ -141,17 +165,28 @@ class CanaryHandler(http.server.BaseHTTPRequestHandler):
 class serve:
     """Context manager: `with serve(...) as srv: srv.port`."""
 
-    def __init__(self, jsonl_path, secret: str, salt_epoch: str, host: str = "127.0.0.1", port: int = 0):
+    def __init__(
+        self,
+        jsonl_path,
+        secret: str,
+        salt_epoch: str,
+        host: str = "127.0.0.1",
+        port: int = 0,
+        known_labels: Sequence[str] = (),
+    ):
         self.jsonl_path = pathlib.Path(jsonl_path)
         self.secret = secret
         self.salt_epoch = salt_epoch
         self.host = host
         self.port = port
+        self.known_labels = tuple(known_labels)
         self.server: Optional[CanaryServer] = None
         self.thread: Optional[threading.Thread] = None
 
     def __enter__(self) -> "serve":
-        self.server = CanaryServer((self.host, self.port), self.jsonl_path, self.secret, self.salt_epoch)
+        self.server = CanaryServer(
+            (self.host, self.port), self.jsonl_path, self.secret, self.salt_epoch, self.known_labels
+        )
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         return self
@@ -173,6 +208,12 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Log canary token callbacks as contract events.")
     parser.add_argument("--jsonl", type=pathlib.Path, required=True)
     parser.add_argument("--label", default="demo", help="label to issue a demo token for")
+    parser.add_argument(
+        "--known-label",
+        action="append",
+        default=[],
+        help="a label whose tokens count as issued; repeatable (default: the --label one)",
+    )
     parser.add_argument("--base-url", default="http://127.0.0.1:8080")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8080)
@@ -186,7 +227,8 @@ def main(argv=None) -> int:
     print(f"callback   {token.callback_url(args.base_url)}")
     print(f"secret     {secret}   (store this; callbacks cannot be re-derived without it)")
     print(f"events     {args.jsonl}")
-    with serve(args.jsonl, secret, args.epoch, host=args.host, port=args.port) as srv:
+    known = tuple(dict.fromkeys([args.label, *args.known_label]))
+    with serve(args.jsonl, secret, args.epoch, host=args.host, port=args.port, known_labels=known) as srv:
         print(f"listening on http://{args.host}:{srv.bound_port}/c/{token.token_id}")
         try:
             while True:

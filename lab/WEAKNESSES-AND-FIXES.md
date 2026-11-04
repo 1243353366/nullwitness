@@ -18,6 +18,16 @@ Every claim below is backed by a command you can run.
 | Enrichment script never parsed | regex written as a literal `\u0000` range, which R rejects in a string literal | `\p{Cc}\p{Cf}` classes, which also catch the zero-width characters worth worrying about | `StaticTests.test_no_nul_escape_in_a_string_literal` |
 | Enrichment loop could not terminate | batch paging called with no cursor, so every pass re-read the same page | cursor advances on `event_id`, the ordering column, and the loop breaks on a non-advancing cursor | `DatabaseTests.test_paging_inserts_once_and_terminates` |
 | "Quantize to INT8 and deploy on kernel inspection rigs" | no model, no export, no measurement | not implemented; a numpy logistic regression that trains in under a second and reports real AUC | `python3 -m lab.orchestrator.run_pipeline` |
+| Every envelope rejection described itself | `peek()` raised a different message for too short, unknown version, and unknown backend; decryption said "wrong key or modified" only by luck of wording | one public sentence for every rejection, specifics in `.detail`, and the dead `KeyMismatch` class removed because a wrong-key error is the oracle the protocol refuses to be | `python3 -m unittest lab.tests.test_oracles` |
+| A legacy envelope shorter than its tag was accepted by `peek()` | the minimum-length check used the GCM tag size for both backends, so a 40-byte legacy envelope passed and then sliced tag bytes into the ciphertext | per-backend minimum length, computed from the backend byte | `LegacyShapeTests.test_a_legacy_envelope_shorter_than_its_tag_is_refused_by_peek` |
+| Replay rejection disclosed the stream position | the message printed the high-water mark, and "already seen" was textually distinct from "below the mark" | one sentence for both, position kept in `.detail` | `UniformFailureTests.test_rejection_text_discloses_no_state` |
+| `tokens.verify` described the token format | malformed ids raised, valid-shaped ids returned False, so "not even the right shape" was a separate observable | returns False either way | `TokenOracleTests.test_verify_answers_false_rather_than_describing_the_format` |
+| Any guessed token counted as a canary hit | the listener recorded every well-formed id as `canary_access`, so sixteen hex characters raised the leak signal | `canary_probe` channel for ids this key never issued, `token_state` label, identical 204 either way so the response still reveals nothing | `ListenerTests.test_a_token_nobody_issued_is_recorded_as_a_probe_not_a_hit` |
+| `bytes_in` reported the User-Agent's length | the field was filled with `len(header)`, a number a feature would read as request size | computed from the request line and headers | `ListenerTests.test_callback_records_event_without_storing_the_address` |
+| The pilot could not authenticate | compose told the runner to connect as `lab_analysis`, which `001_schema.sql` creates `NOLOGIN` | runner gets no unused credentials; `schema/002_pilot_roles.sh` grants `LOGIN` to the least-privilege roles only when a password is set | `PilotTests.test_the_pipeline_is_not_handed_credentials_it_never_uses`, `RoleBootstrapTests.test_bootstrap_against_a_live_server` |
+| The role bootstrap did nothing | `psql -c` does not interpolate `-v` variables, so the `ALTER ROLE` failed on a bare colon | statements fed on stdin, where interpolation happens; tested with a password containing a quote and a semicolon | `RoleBootstrapTests.test_the_bootstrap_does_not_use_psql_dash_c` |
+| Pilot readiness passed before the schema existed | healthcheck asked whether the socket answered | healthcheck asserts the schema's own tables are present | `PilotTests.test_readiness_means_the_schema_is_present` |
+| Postgres was published on every interface | default compose port mapping binds `0.0.0.0` | bound to `127.0.0.1` by default | `PilotTests.test_postgres_is_not_published_on_every_interface` |
 
 ## The three that mattered
 
@@ -91,6 +101,32 @@ and convergence.
 
 This is a model of analyst caution, not a theory of adversary cognition. See
 [DESIGN-NOTES.md](DESIGN-NOTES.md) for what is and is not claimed.
+
+## The audit passes: oracles and the pilot
+
+Two sweeps after the port, each looking for a class of defect rather than a file.
+
+**Oracles.** A distinguishable failure answers a question the attacker could otherwise
+only guess. The envelope returned four different messages for four different structural
+mistakes, which tells a prober how far their guess got, and it defined a `KeyMismatch`
+class for exactly the distinction the protocol's own docstring says it refuses to make.
+The fix is one sentence per family with the specifics in `.detail`, but it is worth being
+clear about what it buys: message uniformity, not timing uniformity. The pure-Python AES
+still leaks through its S-box table, and the disclosure section of the README says so
+rather than letting the uniform string imply more than it proves.
+
+The canary half had the same shape with a worse consequence. The listener recorded every
+well-formed token id as an access, so a scanner that guessed sixteen hex characters could
+raise the leak signal, and a real hit could not be told apart from noise. Splitting
+`canary_access` from `canary_probe` costs a channel in the contract and a label in the
+event, and buys back a signal that is worth reading.
+
+**The pilot.** `docker-compose.yml` had never been started, and it could not have
+started: the runner authenticated as a `NOLOGIN` role, the healthcheck asked the wrong
+question, and the port was open to the network. The useful part of this pass was not the
+YAML. It was that fixing the role bootstrap produced a second bug in the fix, because
+`psql -c` silently does not interpolate variables, and only running it against a live
+server caught that. A pilot file that has never run is a hypothesis about a pilot.
 
 ## Deliberately not fixed, because it should not exist
 

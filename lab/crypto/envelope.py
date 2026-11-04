@@ -66,20 +66,56 @@ class CryptoError(Exception):
     """Base class so callers can catch the family without catching everything."""
 
 
-class Tampered(CryptoError):
+class _Uniform(CryptoError):
+    """An error whose observable form is fixed, with the specifics kept local.
+
+    A distinguishable failure is an oracle: it answers a question the attacker could
+    otherwise only guess. "Wrong key" versus "modified byte" is the classic version (it
+    turns a cipher into a decryption service), but the same shape appears anywhere a
+    rejection explains itself, including "that envelope was too short" versus "unknown
+    version", which tells a prober how far their guess got.
+
+    So `str()` returns one sentence for every instance of the class, and the detail that
+    an operator actually wants sits in `.detail`, which is for logs on the host that
+    raised it. Nothing on a network path may serialise `.detail` or the class name; see
+    `lab/TRUST-CHAIN.md` and the disclosure section of `lab/README.md`.
+    """
+
+    PUBLIC = "rejected"
+
+    def __init__(self, detail: str = "") -> None:
+        self.detail = detail
+        super().__init__(self.PUBLIC)
+
+    def __str__(self) -> str:
+        return self.PUBLIC
+
+
+class Tampered(_Uniform):
     """The ciphertext, header, or associated data does not authenticate."""
 
+    PUBLIC = (
+        "envelope does not authenticate: it was truncated or rewritten, or it was written "
+        "under a different key, and those are not distinguishable from outside the protocol"
+    )
 
-class KeyMismatch(CryptoError):
-    """Right shape, wrong key: decryption would produce noise, so it refuses."""
 
-
-class Replay(CryptoError):
+class Replay(_Uniform):
     """A record that was already accepted, offered again."""
 
+    PUBLIC = (
+        "record is not acceptable for this stream: it was seen before, or it is older than "
+        "the position this stream has already accepted"
+    )
 
-class OutOfOrder(CryptoError):
+
+class OutOfOrder(_Uniform):
     """A record older than the high-water mark for its stream."""
+
+    PUBLIC = (
+        "record is not acceptable for this stream: it was seen before, or it is older than "
+        "the position this stream has already accepted"
+    )
 
 
 def _keystream(ring: KeyRing, nonce: bytes, length: int) -> bytes:
@@ -141,14 +177,23 @@ BACKEND_TAG_LEN = {BACKEND_STDLIB: TAG_LEN, BACKEND_GCM: GCM_TAG_LEN}
 
 
 def peek(blob: bytes) -> EnvelopeInfo:
-    if len(blob) < HEADER_LEN + GCM_TAG_LEN:
-        raise Tampered(f"envelope is {len(blob)} bytes, shorter than a header and tag")
-    if blob[:3] != VERSION:
-        raise Tampered(f"unknown envelope version {blob[:3]!r}")
+    """Read the public shape of an envelope, or refuse with one uniform answer.
+
+    The minimum length is per backend, because the two tag lengths differ: a 40-byte
+    legacy envelope is structurally short, and the check used to admit it by testing
+    against the GCM tag length. What came next was a slice that mixed tag bytes into the
+    ciphertext, which failed authentication for the wrong reason and said so.
+    """
+    if len(blob) < HEADER_LEN:
+        raise Tampered(f"{len(blob)} bytes cannot hold a {HEADER_LEN}-byte header")
     backend_id = blob[3:4]
     tag_len = BACKEND_TAG_LEN.get(backend_id)
+    if blob[:3] != VERSION:
+        raise Tampered(f"unknown envelope version {blob[:3]!r}")
     if tag_len is None:
         raise Tampered(f"unknown backend {backend_id!r}")
+    if len(blob) < HEADER_LEN + tag_len:
+        raise Tampered(f"{len(blob)} bytes cannot hold a header and a {tag_len}-byte tag")
     return EnvelopeInfo(
         backend=BACKEND_NAMES[backend_id],
         nonce=blob[4:HEADER_LEN],
@@ -198,13 +243,16 @@ class ReplayGuard:
         self._seen: Set[tuple] = set()
 
     def accept(self, stream: str, seq: int) -> None:
+        # Both branches return the same sentence. The distinction is real and the operator
+        # needs it, so it lives in `.detail`; the caller is what decides whether that detail
+        # reaches a log or a network response, and it must be the former.
         if (stream, seq) in self._seen:
-            raise Replay(f"record {stream}/{seq} was already accepted: the same envelope was offered twice")
+            raise Replay(f"replay of {stream}/{seq}: the same envelope was offered twice")
         high = self._high.get(stream)
         if high is not None and seq <= high:
             raise OutOfOrder(
-                f"record {stream}/{seq} arrives below the high-water mark {high}: "
-                "authentic, but in the past, which is how a deletion is hidden"
+                f"{stream}/{seq} arrives below the high-water mark {high}: authentic, but in the past, "
+                "which is how a deletion is hidden"
             )
         self._seen.add((stream, seq))
         self._high[stream] = seq
