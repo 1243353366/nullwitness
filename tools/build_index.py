@@ -265,7 +265,8 @@ def build(root: pathlib.Path) -> str:
     out.append("")
     if not has_lab:
         out.append(
-            "This branch is documentation only. The executable lab is on the "
+            "This branch is the written material, and the only thing here that runs is the "
+            "generator that builds this page. The executable lab is on the "
             "[`experimental` branch](https://github.com/1243353366/nullwitness/tree/experimental), "
             "indexed by the `INDEX.md` there."
         )

@@ -4,7 +4,7 @@ One entry point for everything in this repository. Generated from the tree by
 `tools/build_index.py`, and checked by a test, so a stale link fails the suite instead
 of rotting quietly.
 
-**21 documents · 57 Python modules · 325 test cases · 6 other source files · 19,251 lines.**
+**21 documents · 58 Python modules · 333 test cases · 6 other source files · 19,434 lines.**
 
 ## Start here
 
@@ -198,6 +198,7 @@ of rotting quietly.
 - [`lab/tests/test_counterforensics.py`](lab/tests/test_counterforensics.py): Tests for the counter-anti-forensic layer.
 - [`lab/tests/test_crypto.py`](lab/tests/test_crypto.py): Tests for the trust chain: five properties, each with a case that holds and one that fails.
 - [`lab/tests/test_economics.py`](lab/tests/test_economics.py): Tests for the economics layer: arithmetic, proportionality, ladder, loop.
+- [`lab/tests/test_enrich_r.py`](lab/tests/test_enrich_r.py): Verification for `lab/enrich/enrich.R`.
 - [`lab/tests/test_index.py`](lab/tests/test_index.py): Fails when INDEX.md has drifted from the tree.
 - [`lab/tests/test_integrity.py`](lab/tests/test_integrity.py): Integrity cases: positives, negatives, and the single-host rollback limit.
 - [`lab/tests/test_lab.py`](lab/tests/test_lab.py): Tests for the experimental lab.
