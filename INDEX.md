@@ -4,7 +4,7 @@ One entry point for everything in this repository. Generated from the tree by
 `tools/build_index.py`, and checked by a test, so a stale link fails the suite instead
 of rotting quietly.
 
-**21 documents · 58 Python modules · 333 test cases · 6 other source files · 19,477 lines.**
+**21 documents · 59 Python modules · 341 test cases · 6 other source files · 19,634 lines.**
 
 ## Start here
 
@@ -202,6 +202,7 @@ of rotting quietly.
 - [`lab/tests/test_index.py`](lab/tests/test_index.py): Fails when INDEX.md has drifted from the tree.
 - [`lab/tests/test_integrity.py`](lab/tests/test_integrity.py): Integrity cases: positives, negatives, and the single-host rollback limit.
 - [`lab/tests/test_lab.py`](lab/tests/test_lab.py): Tests for the experimental lab.
+- [`lab/tests/test_readmes.py`](lab/tests/test_readmes.py): Every factual claim the READMEs make, checked against the tree.
 
 **tools/**
 

@@ -54,7 +54,7 @@ is reserved for documentation and resolves nowhere.
 The word "simulation" here means reading and discussing a fictional scenario. It does
 not mean running a technical simulator.
 
-The `experimental` branch breaks all five of those properties on purpose. That branch
+The `experimental` branch breaks every one of those properties on purpose. That branch
 is an engineering experiment with a build step, dependencies, tests, and containers;
 this one is the written argument. Keep them separate and neither has to pretend.
 
