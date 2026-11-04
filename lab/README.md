@@ -2,12 +2,16 @@
 
 The `experimental` branch turns the research dump in
 [`source/nerdshit.md`](source/nerdshit.md) into something that runs, fails loudly, and
-can be audited. It is built on top of `main`, which stays a static, non-executing
-educational repo. Nothing here changes `main`.
+can be audited. It is built on top of `main`, which stays a documentation branch: prose,
+one JSON file, and the index generator. Two files are shared with `main` rather than
+copied, `tools/build_index.py` and the parts of `README.md` that describe both branches,
+because an index that drifts between branches is worse than no index.
 
-**Status: experimental.** One layer is a real, tested implementation with honest
-gaps. Several parts of the source are deliberately not implemented, and the reasons
-are written down rather than implied.
+**Status: experimental.** Most layers are tested implementations with honest gaps:
+the pipeline, the canaries, the integrity monitor, the trust chain, and the economics
+all run and all have tests. Some parts of the source are deliberately not implemented,
+and some single files are unverified for environmental reasons; both cases are stated
+below rather than implied.
 
 ## What this is
 
@@ -86,6 +90,7 @@ python3 -m unittest discover -s lab/tests -t . -v
 make -C lab/ingest check
 
 # Java bridge: scope check against main's scenarios, event fixtures, doc summary
+# needs a JDK 21 on PATH; override with JAVAC=/path/javac JAVA=/path/java
 make -C bridge check
 make -C bridge run
 
@@ -136,7 +141,7 @@ lab/
   INTEGRITY.md              threat model, channels, false-positive policy, limits
   COUNTER-ANTI-FORENSICS.md the adversary who read this repo: techniques, detectors, limits
   TRUST-CHAIN.md            the five properties: encryption, authentication, keys, boot, endpoint
-  crypto/aesgcm.py          AES-256-GCM, NIST-verified, library-backed when available
+  crypto/aesgcm.py          AES-256-GCM; NIST test vectors plus differential testing, constant-time only via the library
   crypto/archive.py         envelope digests chained into the integrity ledger
   DEFENSE-ECONOMICS.md      asymmetry, proportionality, resilience, adaptation with numbers
   economics/                the same four as code: tiers, cost model, profiling depth, the loop
@@ -146,7 +151,7 @@ lab/
   INCENTIVE-DESIGN.md       levers, substitution, and where deterrence ends and manipulation starts
   economics/constraints.py  capability, legitimacy, perception, dependency: who owns each axis
   CONSTRAINT-AXES.md        the four, priced by margin, and why they do not add up
-  tests/                    68 unittest cases, no pytest needed
+  tests/                    the whole suite, unittest only, no pytest needed
   ingest/                   C++ bounded queue, Makefile, self-test
   schema/                   TimescaleDB schema, RLS, rollup view
   enrich/                   R enrichment with parameterized queries
@@ -203,5 +208,6 @@ do. So the branch keeps the same boundaries in a different form: the lab is scop
 assets you control, it stores no addresses, and it refuses the parts of the source
 that would point at people.
 
-If the experiment stops being useful, deleting the branch deletes the lab. `main` is
-unaffected either way.
+If the experiment stops being useful, deleting the branch deletes the lab. `main` keeps
+its own copies of the prose and the generator, so it loses nothing but the links into
+this branch, and its `INDEX.md` regenerates without them.
