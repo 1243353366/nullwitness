@@ -95,6 +95,36 @@ class ComposeContractTests(unittest.TestCase):
             self.assertIn(name, template, f"{name} is used by the stack and undocumented in .env.example")
 
 
+def sql_without_comments(path: pathlib.Path) -> str:
+    """Scanning raw text counts the word GRANT inside a comment, which is how this test
+    first failed on its own explanation."""
+    text = path.read_text(encoding="utf-8")
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    return re.sub(r"--[^\n]*", "", text)
+
+
+class SchemaOrderTests(unittest.TestCase):
+    """A schema that is only correct on its second application is wrong on a fresh volume."""
+
+    def test_roles_are_created_before_anything_grants_to_them(self):
+        schema = sql_without_comments(SCHEMA)
+        created = schema.find("CREATE ROLE lab_analysis")
+        self.assertGreater(created, -1)
+        for match in re.finditer(r"GRANT [^;]*\blab_analysis\b", schema):
+            self.assertGreater(
+                match.start(),
+                created,
+                "a GRANT before the role exists raises 'role lab_analysis does not exist', and on a "
+                "first application that silently leaves the analysis role without its privileges",
+            )
+
+    def test_a_grant_never_names_a_role_the_file_does_not_create(self):
+        schema = sql_without_comments(SCHEMA)
+        named = set(re.findall(r"\b(lab_[a-z]+)\b", schema))
+        created = set(re.findall(r"CREATE ROLE (lab_[a-z]+)", schema))
+        self.assertEqual(named - created - {"lab"}, set())
+
+
 class RoleBootstrapTests(unittest.TestCase):
     def test_the_schema_keeps_its_roles_unable_to_log_in(self):
         schema = SCHEMA.read_text(encoding="utf-8")
@@ -127,6 +157,9 @@ class RoleBootstrapTests(unittest.TestCase):
         psql = shutil.which("psql")
         if not psql or not os.environ.get("PGHOST"):
             raise unittest.SkipTest("no psql or PGHOST; set both to exercise the live path")
+        probe = subprocess.run([psql, "-tAc", "SELECT 1"], capture_output=True, text=True)
+        if probe.returncode != 0:
+            raise unittest.SkipTest(f"no server at PGHOST: {probe.stderr.strip().splitlines()[:1]}")
 
         def query(sql: str) -> str:
             out = subprocess.run(

@@ -118,6 +118,23 @@ CREATE TABLE IF NOT EXISTS semantic_anchors (
 -- sequential scan per candidate and gets replaced by something worse under load.
 CREATE INDEX IF NOT EXISTS semantic_anchors_trgm_idx ON semantic_anchors USING gin (anchor_text gin_trgm_ops);
 
+-- Roles are cluster-wide and this file is meant to be re-runnable, so creation is
+-- idempotent. It also has to come first: a GRANT naming a role that does not exist yet
+-- raises "role lab_analysis does not exist", and on a fresh volume that error is the
+-- difference between the analysis role holding its privileges and not having them until
+-- somebody happens to apply this file a second time. Found by applying the schema once to
+-- an empty database instead of twice to a warm one.
+DO $roles$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'lab_analysis') THEN
+        CREATE ROLE lab_analysis NOLOGIN;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'lab_ingest') THEN
+        CREATE ROLE lab_ingest NOLOGIN;
+    END IF;
+END
+$roles$;
+
 GRANT SELECT, INSERT ON enrichment TO lab_analysis;
 GRANT USAGE, SELECT ON SEQUENCE semantic_anchors_anchor_id_seq TO lab_analysis;
 GRANT SELECT ON semantic_anchors TO lab_analysis;
@@ -143,17 +160,6 @@ SELECT add_retention_policy('events', INTERVAL '30 days');
 -- Roles are cluster-wide, not database-wide, so a plain CREATE breaks the second
 -- application of this file with "role already exists". Idempotent instead: this
 -- schema is meant to be re-runnable against a database that is already there.
-DO $roles$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'lab_analysis') THEN
-        CREATE ROLE lab_analysis NOLOGIN;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'lab_ingest') THEN
-        CREATE ROLE lab_ingest NOLOGIN;
-    END IF;
-END
-$roles$;
-
 GRANT USAGE ON SCHEMA public TO lab_analysis, lab_ingest;
 GRANT SELECT, INSERT ON events TO lab_ingest;
 GRANT SELECT ON events, clients, sources, salt_epochs TO lab_analysis;
