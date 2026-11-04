@@ -93,7 +93,7 @@ git checkout experimental
 
 python3 -m lab.orchestrator.run_pipeline --write-report   # pipeline, synthetic data
 python3 -m lab.integrity.cli demo                         # evidence-integrity demo
-python3 -m unittest discover -s lab/tests -t .            # 322 tests
+python3 -m unittest discover -s lab/tests -t .            # 333 tests
 python3 -m lab.integrity.af_demo                          # counter-anti-forensics demo
 python3 -m lab.crypto.cli demo                            # trust chain, five properties
 python3 -m lab.economics.cli demo                         # tiers, cost, resilience, adaptation

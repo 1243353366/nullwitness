@@ -14,6 +14,9 @@ Every claim below is backed by a command you can run.
 | Drift detection is unusable on classifier output | PSI with quantile bins over scores that saturate at 0.0 and 1.0 | equal-width bins with Laplace smoothing, quantile mode kept for continuous quantities | `MonitorTests.test_psi_does_not_explode_on_saturated_scores` |
 | Shadow model is decorative | two models on identical inputs agree by construction | shadow trains on a disjoint feature view; a controlled label-corruption probe shows the divergence move | `MonitorTests.test_shadow_flags_more_when_labels_are_corrupted` |
 | Temporal validation leaks | k-fold shuffling over time series | ordered, non-overlapping folds with an assertion that training never reaches the test window | `TemporalValidationTests` |
+| Enrichment layer cannot run at all | `enrich.R` writes to `enrichment` and reads `semantic_anchors`, and neither table was ever created by `001_schema.sql` | both tables added with the indexes the queries need, and the sanitiser's length cap enforced by a CHECK constraint | `python3 -m unittest lab.tests.test_enrich_r` |
+| Enrichment script never parsed | regex written as a literal `\u0000` range, which R rejects in a string literal | `\p{Cc}\p{Cf}` classes, which also catch the zero-width characters worth worrying about | `StaticTests.test_no_nul_escape_in_a_string_literal` |
+| Enrichment loop could not terminate | batch paging called with no cursor, so every pass re-read the same page | cursor advances on `event_id`, the ordering column, and the loop breaks on a non-advancing cursor | `DatabaseTests.test_paging_inserts_once_and_terminates` |
 | "Quantize to INT8 and deploy on kernel inspection rigs" | no model, no export, no measurement | not implemented; a numpy logistic regression that trains in under a second and reports real AUC | `python3 -m lab.orchestrator.run_pipeline` |
 
 ## The three that mattered

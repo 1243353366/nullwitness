@@ -39,15 +39,39 @@ decision, not a limitation: see [ETHICS-AND-LIMITS.md](ETHICS-AND-LIMITS.md).
 | Forensic-integrity monitor | `integrity/monitor.py` | tested, 10-scenario demo |
 | Tamper-evident ledger | `integrity/ledger.py` | tested, forgery and rollback covered |
 | Ingestion queue (C++) | `ingest/collector.hpp` | compiled and self-tested with g++ |
-| Schema (SQL) | `schema/001_schema.sql` | **unverified**, no PostgreSQL in the lab sandbox |
-| Enrichment (R) | `enrich/enrich.R` | **unverified**, no R in the lab sandbox |
-| Container run | `docker-compose.yml` | **unverified**, no Docker in the lab sandbox |
+| Schema (SQL) | `schema/001_schema.sql` | applied twice against PostgreSQL 18.6; every statement outside the TimescaleDB extension succeeds |
+| Enrichment (R) | `enrich/enrich.R` | parsed and run against PostgreSQL 18.6 (R 4.6.2, DBI 1.3.0, RPostgres 1.4.10) |
+| Container run | `docker-compose.yml` | **unverified**, no Docker in the lab sandbox; the YAML parses and names real services |
 | ONNX / INT8 edge inference | n/a | not implemented |
 | Cross-network attribution | n/a | excluded, see ethics page |
 | Active probing | n/a | excluded, see ethics page |
 
-The three unverified files are unverified for an environmental reason, not a design
-one. They are written to be reviewed and run on a host that has the services.
+One file is still unverified, for an environmental reason: no Docker in the sandbox, so
+`docker-compose.yml` is a definition rather than a running stack.
+
+The other two were marked unverified for weeks and are now exercised, which is how four
+defects surfaced in files nobody could run:
+
+- `enrich.R` did not parse at all. A regex written as a literal range from `\u0000`
+  fails, because R forbids a nul character in a string. The file had never executed.
+- The same script's batch loop could not terminate. It called `enrich_batch(con)` with no
+  cursor on every pass, so it re-read the first page forever and printed progress while
+  writing nothing.
+- `enrich.R` writes to `enrichment` and reads `semantic_anchors`, and neither table
+  existed in `001_schema.sql`. The enrichment step could never have run against the
+  schema it was written for.
+- The schema was not re-runnable: `CREATE ROLE` failed on a second application, and a
+  grant pointed at a sequence that does not exist.
+
+All four are fixed and covered by `lab/tests/test_enrich_r.py`, which skips when R or a
+database is absent rather than reporting a pass it did not earn. Run it against a live
+instance with:
+
+```bash
+RSCRIPT=/path/to/Rscript \
+LAB_VERIFY_DSN="host=/tmp port=5432 dbname=lab user=postgres" \
+python3 -m unittest lab.tests.test_enrich_r -v
+```
 
 ## Quickstart
 
@@ -55,7 +79,7 @@ one. They are written to be reviewed and run on a host that has the services.
 # runs the whole pipeline on synthetic data and prints a report
 python3 -m lab.orchestrator.run_pipeline --write-report
 
-# 30 tests, including regression tests for each bug fixed during the port
+# every test, including regression tests for each bug fixed during the port
 python3 -m unittest discover -s lab/tests -t . -v
 
 # C++ ingestion self-test: saturates a bounded queue, aborts on deadlock

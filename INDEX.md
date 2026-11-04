@@ -4,7 +4,7 @@ One entry point for everything in this repository. Generated from the tree by
 `tools/build_index.py`, and checked by a test, so a stale link fails the suite instead
 of rotting quietly.
 
-**20 documents · 57 Python modules · 322 test cases · 6 other source files · 19,062 lines.**
+**21 documents · 57 Python modules · 325 test cases · 6 other source files · 19,251 lines.**
 
 ## Start here
 
@@ -24,6 +24,8 @@ of rotting quietly.
 | `python3 -m unittest discover -s lab/tests -t .` | every Python test |
 | `python3 -m lab.integrity.cli demo` | integrity monitor, ten scenarios |
 | `python3 -m lab.integrity.cli demo --json` | the same findings as JSON |
+| `python3 -m lab.economics.cli design` | four levers, two outcomes, and what the arithmetic says |
+| `python3 -m lab.economics.cli axes` | capability, legitimacy, perception, dependency, and who owns them |
 | `python3 -m lab.orchestrator.run_pipeline --write-report` | traffic pipeline end to end, synthetic data |
 | `make -C lab/ingest check` | C++ bounded-queue self-test |
 | `make -C bridge check JAVAC=javac JAVA=java` | Java bridge self-test |
@@ -34,8 +36,8 @@ of rotting quietly.
 
 | Branch | Holds |
 | --- | --- |
-| `main` | The written material, static by design. Nothing executes here. |
-| `experimental` | The written material plus the lab and the bridge: pipeline, canaries, integrity monitor. |
+| `main` | The written material, the archived material, and this generator. No lab, no pipeline. |
+| `experimental` | This branch: the written material plus the lab and the bridge, and the generator. |
 | `build/static-educational-sandbox` | Earlier static build. |
 
 ## Every file

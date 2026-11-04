@@ -82,15 +82,21 @@ START_HERE = [
     ("lab/INTEGRITY.md", "The current focus: detecting tampering with the evidence environment."),
 ]
 
+# (command, what it does, paths that must exist for it to be runnable here). The third
+# element is the point: the index used to list the lab and bridge commands on `main`,
+# where neither exists, so the one document meant to be trustworthy advertised four
+# commands that could only fail. A command is listed when its target is in this branch.
 COMMANDS = [
-    ("python3 -m unittest discover -s lab/tests -t .", "every Python test"),
-    ("python3 -m lab.integrity.cli demo", "integrity monitor, ten scenarios"),
-    ("python3 -m lab.integrity.cli demo --json", "the same findings as JSON"),
-    ("python3 -m lab.orchestrator.run_pipeline --write-report", "traffic pipeline end to end, synthetic data"),
-    ("make -C lab/ingest check", "C++ bounded-queue self-test"),
-    ("make -C bridge check JAVAC=javac JAVA=java", "Java bridge self-test"),
-    ("make -C bridge run JAVAC=javac JAVA=java", "bridge reads scenarios.json, writes the report"),
-    ("python3 tools/build_index.py --check", "verify this index matches the tree"),
+    ("python3 -m unittest discover -s lab/tests -t .", "every Python test", ("lab/tests",)),
+    ("python3 -m lab.integrity.cli demo", "integrity monitor, ten scenarios", ("lab/integrity/cli.py",)),
+    ("python3 -m lab.integrity.cli demo --json", "the same findings as JSON", ("lab/integrity/cli.py",)),
+    ("python3 -m lab.economics.cli design", "four levers, two outcomes, and what the arithmetic says", ("lab/economics/cli.py",)),
+    ("python3 -m lab.economics.cli axes", "capability, legitimacy, perception, dependency, and who owns them", ("lab/economics/cli.py",)),
+    ("python3 -m lab.orchestrator.run_pipeline --write-report", "traffic pipeline end to end, synthetic data", ("lab/orchestrator/run_pipeline.py",)),
+    ("make -C lab/ingest check", "C++ bounded-queue self-test", ("lab/ingest/Makefile",)),
+    ("make -C bridge check JAVAC=javac JAVA=java", "Java bridge self-test", ("bridge/Makefile",)),
+    ("make -C bridge run JAVAC=javac JAVA=java", "bridge reads scenarios.json, writes the report", ("bridge/Makefile",)),
+    ("python3 tools/build_index.py --check", "verify this index matches the tree", ("tools/build_index.py",)),
 ]
 
 
@@ -206,9 +212,13 @@ def counts(root: pathlib.Path, files: List[str]) -> Dict[str, int]:
     """
     stats = {"tests": 0, "python": 0, "docs": 0, "other_code": 0, "lines": 0}
     for rel in files:
-        if rel == "INDEX.md":
-            continue
         path = root / rel
+        if rel == "INDEX.md":
+            # Counted as a document, excluded from the line total. Both halves matter:
+            # leaving it out of the count under-reported the repository by one document,
+            # and including its length would make regeneration non-idempotent.
+            stats["docs"] += 1
+            continue
         suffix = path.suffix
         if suffix == ".py":
             stats["python"] += 1
@@ -270,20 +280,45 @@ def build(root: pathlib.Path) -> str:
             out.append(f"| [`{rel}`]({rel}) | {why} |")
     out.append("")
 
-    out.append("## Commands" if has_lab else "## Commands on the experimental branch")
+    runnable = [
+        (command, what) for command, what, needs in COMMANDS if all((root / path).exists() for path in needs)
+    ]
+    elsewhere = [command for command, what, needs in COMMANDS if (command, what) not in runnable]
+    out.append("## Commands" if runnable else "## Commands (none on this branch)")
     out.append("")
-    out.append("| Command | What it does |")
-    out.append("| --- | --- |")
-    for command, what in COMMANDS:
-        out.append(f"| `{command}` | {what} |")
-    out.append("")
+    if runnable:
+        out.append("| Command | What it does |")
+        out.append("| --- | --- |")
+        for command, what in runnable:
+            out.append(f"| `{command}` | {what} |")
+        out.append("")
+    if elsewhere:
+        out.append(
+            f"{len(elsewhere)} more command{'s' if len(elsewhere) > 1 else ''} need files that are not on this "
+            "branch; the `INDEX.md` on `experimental` lists them."
+        )
+        out.append("")
 
     out.append("## Branches")
     out.append("")
     out.append("| Branch | Holds |")
     out.append("| --- | --- |")
-    out.append("| `main` | The written material, static by design. Nothing executes here. |")
-    out.append("| `experimental` | The written material plus the lab and the bridge: pipeline, canaries, integrity monitor. |")
+    if has_lab:
+        out.append(
+            "| `main` | The written material, the archived material, and this generator. No lab, no pipeline. |"
+        )
+        out.append(
+            "| `experimental` | This branch: the written material plus the lab and the bridge, and the generator. |"
+        )
+    else:
+        out.append(
+            "| `main` | This branch: the written material, the archived material, and the generator that builds "
+            "this page. That generator is the only thing here that runs. |"
+        )
+        out.append(
+            "| `experimental` | The written material plus the lab and the bridge: pipeline, canaries, integrity "
+            "monitor, economics, and the tests. |"
+        )
     out.append("| `build/static-educational-sandbox` | Earlier static build. |")
     out.append("")
 
