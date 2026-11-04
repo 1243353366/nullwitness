@@ -11,7 +11,17 @@ import pathlib
 import re
 import unittest
 
-from tools.build_index import COMMANDS, SKIP_DIRS, SKIP_NAMES, SKIP_SUFFIXES, build, load_root, tracked_files, walk
+from tools.build_index import (
+    COMMANDS,
+    SKIP_DIRS,
+    SKIP_NAMES,
+    SKIP_SUFFIXES,
+    available,
+    build,
+    load_root,
+    tracked_files,
+    walk,
+)
 
 
 class IndexTests(unittest.TestCase):
@@ -42,8 +52,9 @@ class IndexTests(unittest.TestCase):
 
     def test_every_listed_command_can_actually_run_here(self):
         """A single entry point that advertises unrunnable commands is worse than no entry point."""
+        files = walk(self.root)
         for command, _what, needs in COMMANDS:
-            runnable = all((self.root / path).exists() for path in needs)
+            runnable = all(available(self.root, files, path) for path in needs)
             listed = f"`{command}`" in self.text
             self.assertEqual(
                 listed,

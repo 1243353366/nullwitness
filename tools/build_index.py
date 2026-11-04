@@ -100,6 +100,19 @@ COMMANDS = [
 ]
 
 
+def available(root: pathlib.Path, files: List[str], need: str) -> bool:
+    """Whether a command's target is *tracked* in this branch.
+
+    Checking the filesystem was not enough, and the failure is the same one that bit the
+    `has_lab` check: switching branches leaves ignored directories behind, so
+    `lab/tests/__pycache__` survives a checkout to a docs-only branch and `lab/tests`
+    still exists as an empty directory. The index then advertised the test command on a
+    branch with no tests. Tracked files are the authority.
+    """
+    prefix = need.rstrip("/") + "/"
+    return any(rel == need or rel.startswith(prefix) for rel in files)
+
+
 def load_root(start: pathlib.Path) -> pathlib.Path:
     for candidate in [start] + list(start.parents):
         if all((candidate / marker).exists() for marker in ROOT_MARKERS):
@@ -282,7 +295,9 @@ def build(root: pathlib.Path) -> str:
     out.append("")
 
     runnable = [
-        (command, what) for command, what, needs in COMMANDS if all((root / path).exists() for path in needs)
+        (command, what)
+        for command, what, needs in COMMANDS
+        if all(available(root, files, path) for path in needs)
     ]
     elsewhere = [command for command, what, needs in COMMANDS if (command, what) not in runnable]
     out.append("## Commands" if runnable else "## Commands (none on this branch)")
