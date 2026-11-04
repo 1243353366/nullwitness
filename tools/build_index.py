@@ -127,10 +127,16 @@ def tracked_files(root: pathlib.Path) -> Optional[List[str]]:
     output survives a branch switch, so an index generated on a docs-only branch listed a
     compiled binary that is not in that branch at all. A document about the repository
     should describe what the repository contains, and git is the authority on that.
+
+    Untracked-but-not-ignored files count as part of it, which is the second half of the
+    same lesson. Generating the index before `git add` used to produce a document that
+    omitted the file just written, and `--check` then agreed with it, because both were
+    looking at the same incomplete list. The result was a stale index committed with a
+    clean check, twice.
     """
     try:
         finished = subprocess.run(
-            ["git", "-C", str(root), "ls-files", "-z"],
+            ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
             capture_output=True,
             check=True,
             timeout=30,

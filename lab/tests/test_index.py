@@ -11,6 +11,7 @@ import pathlib
 import re
 import unittest
 
+from tools import build_index
 from tools.build_index import (
     COMMANDS,
     SKIP_DIRS,
@@ -36,6 +37,29 @@ class IndexTests(unittest.TestCase):
             build(self.root),
             "INDEX.md is stale: run python3 tools/build_index.py",
         )
+
+    def test_an_unstaged_file_is_still_part_of_the_tree(self):
+        """The index is generated before `git add`, and `--check` runs against the same list.
+
+        When discovery came from `git ls-files` alone, a file written but not yet staged was
+        invisible to both, so a stale index passed its own check. Twice.
+        """
+        import subprocess as _subprocess
+
+        tracked = pathlib.Path(__file__).resolve().parents[2] / "lab" / "index_probe.tmp"
+        tracked.write_text("probe\n", encoding="utf-8")
+        try:
+            listed = build_index.tracked_files(pathlib.Path(__file__).resolve().parents[2])
+            self.assertIsNotNone(listed)
+            self.assertIn("lab/index_probe.tmp", [str(name) for name in listed],
+                          "an untracked file must be visible: the index is written before staging")
+        finally:
+            tracked.unlink()
+            status = _subprocess.run(
+                ["git", "-C", str(pathlib.Path(__file__).resolve().parents[2]), "status", "--porcelain"],
+                capture_output=True, text=True,
+            )
+            self.assertNotIn("index_probe", status.stdout, "the probe leaked into the working tree")
 
     def test_every_file_is_listed(self):
         missing = [rel for rel in walk(self.root) if f"]({rel})" not in self.text]
