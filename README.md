@@ -26,6 +26,7 @@ or acts on data; the only thing that executes is the index generator described b
 | [`SAFETY.md`](SAFETY.md) | Safety boundaries: what this project will and will not discuss, acceptable defensive measures, and a decision framework. |
 | [`examples/simulation-walkthrough.md`](examples/simulation-walkthrough.md) | A worked discussion of a fictional exposure scenario, from first question to a written decision record. |
 | [`examples/scenarios.json`](examples/scenarios.json) | Three fictional scenarios in machine-readable form, for reuse in workshops or review exercises. |
+| [`examples/experimental-run-summary.md`](examples/experimental-run-summary.md) | What the lab on the `experimental` branch currently produces, written by the Java bridge from this branch's own `scenarios.json`. Generated, not maintained: the header says so, and the command to regenerate it is in the paragraph below. |
 | [`archive/README.md`](archive/README.md) | Notes on the archived code dumps described below. |
 | [`archive/canary-check/`](archive/canary-check/) | Two historical, unmaintained code dumps. Not part of the lesson, not built, not working as stored. |
 | [`LICENSE`](LICENSE) | CC0 1.0 Universal (public domain dedication) for the written material. |
@@ -82,6 +83,15 @@ for the reasoning. Treat them as historical artifacts, not as examples to follow
 The [`experimental` branch](https://github.com/1243353366/nullwitness/tree/experimental) carries an executable lab built on top of this
 repository. `main` stays documentation only, exactly as described above: the prose here
 states boundaries, and the lab is where those boundaries are enforced in code.
+
+The one artifact that crosses from there to here is
+[`examples/experimental-run-summary.md`](examples/experimental-run-summary.md), and the
+Java bridge is what carries it: `make -C bridge run` on the `experimental` branch reads
+these same scenarios, emits the events the lab consumes, and writes the summary, which is
+then copied here unchanged. The bridge does not push anything. It is a data path between
+the two branches, not a deployment step, and treating it as one would be a mistake worth
+naming: the branch boundary is what keeps a documentation repository from shipping an
+executable one.
 
 | Piece | Where | What it is |
 | --- | --- | --- |
