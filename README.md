@@ -88,10 +88,12 @@ The one artifact that crosses from there to here is
 [`examples/experimental-run-summary.md`](examples/experimental-run-summary.md), and the
 Java bridge is what carries it: `make -C bridge run` on the `experimental` branch reads
 these same scenarios, emits the events the lab consumes, and writes the summary, which is
-then copied here unchanged. The bridge does not push anything. It is a data path between
-the two branches, not a deployment step, and treating it as one would be a mistake worth
-naming: the branch boundary is what keeps a documentation repository from shipping an
-executable one.
+then copied into `examples/` unchanged so the last bridged run is reviewable in a diff;
+the live copy stays whatever the bridge last wrote to `lab/reports/`, which is generated
+and ignored. The bridge does not push anything. It is a data path between the two
+branches, not a deployment step, and treating it as one would be a mistake worth naming:
+the branch boundary is what keeps a documentation repository from shipping an executable
+one.
 
 | Piece | Where | What it is |
 | --- | --- | --- |
